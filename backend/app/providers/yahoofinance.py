@@ -7,17 +7,10 @@ from typing import Any, Optional
 import yfinance as yf
 
 from app.models.market import (
-    MarketOverview,
-    MarketQuote,
-    OHLCV,
-    OptionChain,
-    OptionContract,
-    PCRData,
-    MaxPainData,
-    MarketStatus,
-    VIXQuote,
+    MarketOverview, MarketQuote, OHLCV, OptionChain, OptionContract,
+    PCRData, MaxPainData, MarketStatus, VIXQuote,
 )
-from app.providers.mock import MarketDataProvider
+from app.providers.base import MarketDataProvider
 
 logger = logging.getLogger("tradingai.providers.yahoofinance")
 
@@ -29,9 +22,22 @@ SYMBOL_MAP = {
     "USD/INR": "USDINR=X",
     "GOLD": "GOLD=NS",
     "CRUDE": "CL=F",
+    "FINNIFTY": "^NSEFIN",
+    "MIDCPNIFTY": "^NSEMDCP",
+    "NIFTYIT": "^NSEIT",
+    "NIFTYAUTO": "^NSEAUTO",
+    "NIFTYBANK": "^NSEBANK",
+    "NIFTYFMCG": "^NSEFCG",
+    "NIFTYPHARMA": "^NSEPHAR",
+    "NIFTYMETAL": "^NSEMETAL",
+    "NIFTYREALTY": "^NSEREAL",
+    "NIFTYPSUBANK": "^NSEPSUB",
+    "NIFTY50": "^NSEI",
 }
 
-INDEX_SYMBOLS = ["NIFTY", "BANKNIFTY", "SENSEX"]
+SECTOR_SYMBOLS = ["NIFTYIT", "NIFTYAUTO", "NIFTYFMCG", "NIFTYPHARMA", "NIFTYMETAL", "NIFTYREALTY", "NIFTYPSUBANK"]
+
+GLOBAL_SYMBOLS = ["USD/INR", "GOLD", "CRUDE"]
 
 
 class YahooFinanceProvider(MarketDataProvider):
@@ -78,18 +84,11 @@ class YahooFinanceProvider(MarketDataProvider):
             change_pct = (change / prev_close * 100) if prev_close else 0
 
             return MarketQuote(
-                symbol=symbol,
-                name=name,
-                price=round(price, 2),
-                change=round(change, 2),
-                change_pct=round(change_pct, 2),
-                open=round(open_price, 2),
-                high=round(high, 2),
-                low=round(low, 2),
-                previous_close=round(prev_close, 2),
-                volume=volume,
-                timestamp=datetime.now(timezone.utc).isoformat(),
-                market_status="Open",
+                symbol=symbol, name=name, price=round(price, 2),
+                change=round(change, 2), change_pct=round(change_pct, 2),
+                open=round(open_price, 2), high=round(high, 2), low=round(low, 2),
+                previous_close=round(prev_close, 2), volume=volume,
+                timestamp=datetime.now(timezone.utc).isoformat(), market_status="Open",
             )
         except Exception as e:
             logger.error(f"Error parsing quote for {symbol}: {e}")
@@ -123,13 +122,9 @@ class YahooFinanceProvider(MarketDataProvider):
             for idx, row in hist.tail(limit).iterrows():
                 ohlcv_list.append(
                     OHLCV(
-                        symbol=symbol.upper(),
-                        timeframe=interval,
-                        timestamp=idx.isoformat(),
-                        open=float(row["Open"]),
-                        high=float(row["High"]),
-                        low=float(row["Low"]),
-                        close=float(row["Close"]),
+                        symbol=symbol.upper(), timeframe=interval, timestamp=idx,
+                        open=float(row["Open"]), high=float(row["High"]),
+                        low=float(row["Low"]), close=float(row["Close"]),
                         volume=int(row["Volume"]),
                     ).to_dict()
                 )
@@ -155,51 +150,28 @@ class YahooFinanceProvider(MarketDataProvider):
 
             calls = [
                 OptionContract(
-                    symbol=symbol.upper(),
-                    expiry=target_expiry,
-                    strike=float(row["strike"]),
-                    option_type="CE",
-                    last_price=float(row["lastPrice"]),
-                    open_interest=int(row["openInterest"]),
-                    change_in_oi=int(row.get("changeInOpenInterest", 0)),
-                    volume=int(row["volume"]),
-                    implied_volatility=float(row.get("impliedVolatility", 0)),
-                    bid=float(row["bid"]),
-                    ask=float(row["ask"]),
-                    delta=0,
-                    gamma=0,
-                    theta=0,
-                    vega=0,
+                    symbol=symbol.upper(), expiry=target_expiry, strike=float(row["strike"]),
+                    option_type="CE", last_price=float(row["lastPrice"]),
+                    open_interest=int(row["openInterest"]), change_in_oi=int(row.get("changeInOpenInterest", 0)),
+                    volume=int(row["volume"]), implied_volatility=float(row.get("impliedVolatility", 0)),
+                    bid=float(row["bid"]), ask=float(row["ask"]), delta=0, gamma=0, theta=0, vega=0,
                 ).to_dict()
                 for _, row in opt.calls.iterrows()
             ]
             puts = [
                 OptionContract(
-                    symbol=symbol.upper(),
-                    expiry=target_expiry,
-                    strike=float(row["strike"]),
-                    option_type="PE",
-                    last_price=float(row["lastPrice"]),
-                    open_interest=int(row["openInterest"]),
-                    change_in_oi=int(row.get("changeInOpenInterest", 0)),
-                    volume=int(row["volume"]),
-                    implied_volatility=float(row.get("impliedVolatility", 0)),
-                    bid=float(row["bid"]),
-                    ask=float(row["ask"]),
-                    delta=0,
-                    gamma=0,
-                    theta=0,
-                    vega=0,
+                    symbol=symbol.upper(), expiry=target_expiry, strike=float(row["strike"]),
+                    option_type="PE", last_price=float(row["lastPrice"]),
+                    open_interest=int(row["openInterest"]), change_in_oi=int(row.get("changeInOpenInterest", 0)),
+                    volume=int(row["volume"]), implied_volatility=float(row.get("impliedVolatility", 0)),
+                    bid=float(row["bid"]), ask=float(row["ask"]), delta=0, gamma=0, theta=0, vega=0,
                 ).to_dict()
                 for _, row in opt.puts.iterrows()
             ]
 
             chain = OptionChain(
-                symbol=symbol.upper(),
-                expiry=target_expiry,
-                underlying_price=underlying_price,
-                call_contracts=calls,
-                put_contracts=puts,
+                symbol=symbol.upper(), expiry=target_expiry, underlying_price=underlying_price,
+                call_contracts=calls, put_contracts=puts,
                 timestamp=datetime.now(timezone.utc).isoformat(),
             )
             self._set_cache(f"option_chain:{symbol.upper()}:{target_expiry}", chain)
@@ -217,7 +189,7 @@ class YahooFinanceProvider(MarketDataProvider):
 
     def get_market_overview(self) -> MarketOverview:
         quotes = {}
-        for sym in INDEX_SYMBOLS:
+        for sym in ["NIFTY", "BANKNIFTY", "SENSEX"]:
             q = self.get_quote(sym)
             if q:
                 quotes[sym.lower()] = q
@@ -232,12 +204,9 @@ class YahooFinanceProvider(MarketDataProvider):
             vix=VIXQuote(
                 symbol=vix_quoted.get("symbol", "INDIA VIX"),
                 name=vix_quoted.get("name", "India Volatility Index"),
-                price=vix_quoted.get("price", 0),
-                change=vix_quoted.get("change", 0),
-                change_pct=vix_quoted.get("change_pct", 0),
-                trend=vix_quoted.get("trend", "Stable"),
-                risk_off=vix_quoted.get("risk_off", False),
-                timestamp=vix_quoted.get("timestamp", ""),
+                price=vix_quoted.get("price", 0), change=vix_quoted.get("change", 0),
+                change_pct=vix_quoted.get("change_pct", 0), trend=vix_quoted.get("trend", "Stable"),
+                risk_off=vix_quoted.get("risk_off", False), timestamp=vix_quoted.get("timestamp", ""),
             ),
             market_status="Open" if self.get_market_status().is_open else "Closed",
             timestamp=datetime.now(timezone.utc).isoformat(),
@@ -256,19 +225,44 @@ class YahooFinanceProvider(MarketDataProvider):
             change_pct = (change / prev * 100) if prev else 0
             trend = "Declining" if change < 0 else "Rising" if change > 0 else "Stable"
             vix = VIXQuote(
-                symbol="INDIA VIX",
-                name="India Volatility Index",
-                price=round(price, 2),
-                change=round(change, 2),
-                change_pct=round(change_pct, 2),
-                trend=trend,
-                risk_off=change < 0,
-                timestamp=datetime.now(timezone.utc).isoformat(),
+                symbol="INDIA VIX", name="India Volatility Index", price=round(price, 2),
+                change=round(change, 2), change_pct=round(change_pct, 2), trend=trend,
+                risk_off=change < 0, timestamp=datetime.now(timezone.utc).isoformat(),
             )
             self._set_cache("vix", vix)
             return vix
         except Exception as e:
             logger.error(f"VIX error: {e}")
+            return None
+
+    def get_sector_indices(self) -> Optional[dict[str, MarketQuote]]:
+        result = {}
+        for sym in SECTOR_SYMBOLS:
+            q = self.get_quote(sym)
+            if q:
+                result[sym] = q
+        return result if result else None
+
+    def get_global_markets(self) -> Optional[dict[str, MarketQuote]]:
+        result = {}
+        for sym in GLOBAL_SYMBOLS:
+            q = self.get_quote(sym)
+            if q:
+                result[sym] = q
+        return result if result else None
+
+    def get_stock_quote(self, symbol: str) -> Optional[MarketQuote]:
+        try:
+            ticker = yf.Ticker(symbol.upper() + ".NS")
+            return self._to_market_quote(ticker, symbol.upper(), symbol.upper())
+        except Exception:
+            return None
+
+    def get_etf_quote(self, symbol: str) -> Optional[MarketQuote]:
+        try:
+            ticker = yf.Ticker(symbol.upper())
+            return self._to_market_quote(ticker, symbol.upper(), symbol.upper())
+        except Exception:
             return None
 
     def is_connected(self) -> bool:

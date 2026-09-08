@@ -17,12 +17,15 @@ from config.config import load_config
 from utils.logging import setup_logging
 from app.providers.yahoofinance import YahooFinanceProvider
 from app.providers.mock import MockMarketDataProvider, MarketDataProvider
+from app.providers.base import DataProviderRegistry
 from app.models.market import MarketOverviewResponse, HealthStatus
 from app.models.db import Base
 from app.repositories import MarketRepository, SignalRepository, NewsRepository
 from app.services.cache import cache_service
 from app.services.auth import auth_service
 from app.services.ai import ai_service
+from app.services.scheduler import scheduler
+from app.collectors import MarketCollector, OptionsCollector, NewsCollector, AIAnalyzer
 
 logger = setup_logging("tradingai-api")
 
@@ -46,12 +49,18 @@ async def get_current_user(request: Request) -> Optional[dict]:
 
 
 async def get_provider() -> MarketDataProvider:
-    provider = YahooFinanceProvider()
-    if provider.is_connected():
-        logger.info("Using YahooFinanceProvider")
+    provider = DataProviderRegistry.get_connected()
+    if provider:
         return provider
+    yp = YahooFinanceProvider()
+    if yp.is_connected():
+        DataProviderRegistry.register("yahoofinance", yp)
+        logger.info("Using YahooFinanceProvider")
+        return yp
     logger.info("YahooFinance unavailable, falling back to MockMarketDataProvider")
-    return MockMarketDataProvider()
+    mp = MockMarketDataProvider()
+    DataProviderRegistry.register("mock", mp)
+    return mp
 
 
 @asynccontextmanager
@@ -71,9 +80,12 @@ async def lifespan(app: FastAPI):
             await asyncio.sleep(5)
     if not db_connected:
         logger.warning("Database not available, starting without DB")
+
+    await scheduler.start()
     logger.info("TradingAI API started")
     yield
     logger.info("Shutting down TradingAI API...")
+    await scheduler.stop()
     if cache_service.enabled:
         await cache_service._client.close()
     await engine.dispose()
@@ -100,7 +112,7 @@ def create_app(config: Optional[dict] = None) -> FastAPI:
 
     @app.get("/api/v1/health")
     async def health():
-        provider = YahooFinanceProvider()
+        provider = await get_provider()
         db_ok = True
         redis_ok = cache_service.enabled
         try:
@@ -236,6 +248,34 @@ def create_app(config: Optional[dict] = None) -> FastAPI:
             logger.error(f"Option chain error: {e}")
             raise HTTPException(status_code=500, detail="Failed to fetch option chain")
 
+    @app.get("/api/v1/market/sector-indices")
+    async def get_sector_indices(provider: MarketDataProvider = Depends(get_provider)):
+        result = provider.get_sector_indices()
+        if not result:
+            raise HTTPException(status_code=404, detail="Sector indices not available")
+        return {symbol: quote.to_dict() for symbol, quote in result.items()}
+
+    @app.get("/api/v1/market/global")
+    async def get_global_markets(provider: MarketDataProvider = Depends(get_provider)):
+        result = provider.get_global_markets()
+        if not result:
+            raise HTTPException(status_code=404, detail="Global markets not available")
+        return {symbol: quote.to_dict() for symbol, quote in result.items()}
+
+    @app.get("/api/v1/market/stock/{symbol}")
+    async def get_stock(symbol: str, provider: MarketDataProvider = Depends(get_provider)):
+        quote = provider.get_stock_quote(symbol.upper())
+        if not quote:
+            raise HTTPException(status_code=404, detail="Stock not found")
+        return quote.to_dict()
+
+    @app.get("/api/v1/market/etf/{symbol}")
+    async def get_etf(symbol: str, provider: MarketDataProvider = Depends(get_provider)):
+        quote = provider.get_etf_quote(symbol.upper())
+        if not quote:
+            raise HTTPException(status_code=404, detail="ETF not found")
+        return quote.to_dict()
+
     @app.post("/api/v1/auth/register")
     async def register(username: str = Query(...), password: str = Query(...), role: str = Query("user")):
         ok = auth_service.register(username, password, role)
@@ -282,6 +322,36 @@ def create_app(config: Optional[dict] = None) -> FastAPI:
         signal = ai_service.generate_signal(symbol.upper(), quote)
         return signal
 
+    @app.get("/api/v1/ai/scenarios")
+    async def get_scenarios(
+        current_user: Optional[dict] = Depends(get_current_user),
+    ):
+        from app.services.ai_engine import ai_engine
+        async with async_session() as session:
+            scenarios = await ai_engine.generate_scenarios(session, (await get_provider()).get_market_overview())
+        return {"scenarios": scenarios}
+
+    @app.get("/api/v1/ai/regime")
+    async def get_regime(
+        current_user: Optional[dict] = Depends(get_current_user),
+        provider: MarketDataProvider = Depends(get_provider),
+    ):
+        from app.services.ai_engine import ai_engine
+        async with async_session() as session:
+            overview = provider.get_market_overview()
+            analysis = await ai_engine.analyze_market(session, overview)
+        return analysis
+
+    @app.get("/api/v1/ai/signals")
+    async def get_ai_signals(
+        current_user: Optional[dict] = Depends(get_current_user),
+        symbol: Optional[str] = Query(None),
+    ):
+        from app.services.ai_engine import ai_engine
+        async with async_session() as session:
+            signals = await ai_engine.get_ai_signals(session, symbol)
+        return {"signals": signals}
+
     @app.get("/api/v1/news")
     async def get_news(
         current_user: Optional[dict] = Depends(get_current_user),
@@ -327,6 +397,13 @@ def create_app(config: Optional[dict] = None) -> FastAPI:
                     for s in signals
                 ]
             }
+
+    @app.get("/api/v1/collectors/status")
+    async def collectors_status():
+        return {
+            "scheduler_running": scheduler._running,
+            "collectors": ["market", "options", "news", "ai"],
+        }
 
     start_time = time.time()
     return app

@@ -63,7 +63,7 @@ class MarketRepository:
     async def get_ohlcv(self, symbol: str, interval: str = "1d", limit: int = 100) -> list[OHLCV]:
         result = await self.session.execute(
             select(OHLCV)
-            .where(MarketQuote.symbol == symbol, OHLCV.interval == interval)
+            .where(OHLCV.symbol == symbol, OHLCV.interval == interval)
             .order_by(desc(OHLCV.timestamp))
             .limit(limit)
         )

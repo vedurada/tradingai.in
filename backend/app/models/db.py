@@ -116,3 +116,49 @@ class NewsArticle(Base):
     category = Column(String(50))
     published_at = Column(DateTime, default=datetime.utcnow)
     timestamp = Column(DateTime, default=datetime.utcnow)
+
+
+class AISignal(Base):
+    __tablename__ = "ai_signals"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    symbol = Column(String(20), nullable=False, index=True)
+    regime = Column(String(20), default="NEUTRAL")
+    trend = Column(String(20), default="NEUTRAL")
+    momentum = Column(String(20), default="NEUTRAL")
+    volatility = Column(String(20), default="NEUTRAL")
+    breadth = Column(String(20), default="NEUTRAL")
+    options_sentiment = Column(String(20), default="NEUTRAL")
+    confidence = Column(Float, default=0)
+    reasons_bullish = Column(Text)
+    reasons_bearish = Column(Text)
+    warnings = Column(Text)
+    view_invalidation = Column(Text)
+    is_active = Column(Boolean, default=True)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+
+class Scenario(Base):
+    __tablename__ = "scenarios"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    symbol = Column(String(20), nullable=False, index=True)
+    condition = Column(Text, nullable=False)
+    scenario_type = Column(String(20), default="continuation")
+    probability = Column(Float, default=0)
+    description = Column(Text)
+    is_active = Column(Boolean, default=True)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+
+class CollectorLog(Base):
+    __tablename__ = "collector_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    collector_name = Column(String(100), nullable=False, index=True)
+    status = Column(String(20), default="running")
+    records_updated = Column(Integer, default=0)
+    error = Column(Text)
+    started_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime)
+    duration_seconds = Column(Float)
