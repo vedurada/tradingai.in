@@ -1,0 +1,12 @@
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/api/hello/route": "app/api/hello/route.js",
+  "/page": "app/page.js",
+  "/news/page": "app/news/page.js",
+  "/etfs/page": "app/etfs/page.js",
+  "/ai/page": "app/ai/page.js",
+  "/options/page": "app/options/page.js",
+  "/stocks/page": "app/stocks/page.js",
+  "/markets/page": "app/markets/page.js",
+  "/trading/page": "app/trading/page.js"
+}
