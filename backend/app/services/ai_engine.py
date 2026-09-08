@@ -145,6 +145,7 @@ class AIEngine:
                 reasons_bearish=json.dumps(reasons_bearish),
                 warnings=json.dumps(warnings),
                 view_invalidation=json.dumps(analysis["view_invalidation"]),
+                timestamp=datetime.utcnow(),
             )
             session.add(signal)
             await session.commit()
@@ -194,6 +195,7 @@ class AIEngine:
                     symbol=s["symbol"], condition=s["condition"],
                     scenario_type=s["scenario_type"], probability=s["probability"],
                     description=s["description"],
+                    timestamp=datetime.utcnow(),
                 )
                 session.add(scenario)
             await session.commit()

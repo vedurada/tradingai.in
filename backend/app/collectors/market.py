@@ -48,9 +48,12 @@ class MarketCollector:
             try:
                 ohlcv_list = self.provider.get_ohlcv(sym, interval="5m", limit=12)
                 for ohlcv in ohlcv_list:
+                    ts = datetime.fromisoformat(ohlcv["timestamp"]) if "timestamp" in ohlcv else datetime.utcnow()
+                    if ts.tzinfo is not None:
+                        ts = ts.replace(tzinfo=None)
                     record = OHLCV(
                         symbol=sym, interval="5m",
-                        timestamp=datetime.fromisoformat(ohlcv["timestamp"]) if "timestamp" in ohlcv else datetime.utcnow(),
+                        timestamp=ts,
                         open=ohlcv["open"], high=ohlcv["high"],
                         low=ohlcv["low"], close=ohlcv["close"],
                         volume=ohlcv["volume"],
