@@ -1,13 +1,48 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
+interface TickerItem {
+  symbol: string;
+  price: string;
+  change: string;
+  up: boolean;
+}
+
 export function MarketTicker() {
-  const items = [
-    { symbol: "NIFTY", price: "25,142.35", change: "+105.20", up: true },
-    { symbol: "BANKNIFTY", price: "55,230.50", change: "+245.75", up: true },
-    { symbol: "SENSEX", price: "82,350.75", change: "+312.50", up: true },
-    { symbol: "VIX", price: "12.85", change: "-0.15", up: false },
-    { symbol: "USD/INR", price: "84.52", change: "+0.05", up: false },
-    { symbol: "GOLD", price: "2,650", change: "+12.50", up: true },
-    { symbol: "CRUDE", price: "$72.40", change: "-0.80", up: false },
-  ];
+  const [items, setItems] = useState<TickerItem[]>([
+    { symbol: "NIFTY", price: "---", change: "---", up: true },
+    { symbol: "BANKNIFTY", price: "---", change: "---", up: true },
+    { symbol: "SENSEX", price: "---", change: "---", up: true },
+    { symbol: "VIX", price: "---", change: "---", up: false },
+    { symbol: "USD/INR", price: "---", change: "---", up: false },
+    { symbol: "GOLD", price: "---", change: "---", up: true },
+    { symbol: "CRUDE", price: "---", change: "---", up: false },
+  ]);
+
+  useEffect(() => {
+    async function fetchTicker() {
+      try {
+        const res = await fetch("/api/v1/market/overview");
+        if (!res.ok) return;
+        const data = await res.json();
+        setItems([
+          { symbol: "NIFTY", price: data.nifty?.price?.toLocaleString() || "---", change: `${data.nifty?.change?.toFixed(2) || "---"} (${data.nifty?.change_pct?.toFixed(2) || "---"}%)`, up: (data.nifty?.change || 0) >= 0 },
+          { symbol: "BANKNIFTY", price: data.banknifty?.price?.toLocaleString() || "---", change: `${data.banknifty?.change?.toFixed(2) || "---"} (${data.banknifty?.change_pct?.toFixed(2) || "---"}%)`, up: (data.banknifty?.change || 0) >= 0 },
+          { symbol: "SENSEX", price: data.sensex?.price?.toLocaleString() || "---", change: `${data.sensex?.change?.toFixed(2) || "---"} (${data.sensex?.change_pct?.toFixed(2) || "---"}%)`, up: (data.sensex?.change || 0) >= 0 },
+          { symbol: "VIX", price: data.vix?.price?.toFixed(2) || "---", change: `${data.vix?.change?.toFixed(2) || "---"} (${data.vix?.change_pct?.toFixed(2) || "---"}%)`, up: (data.vix?.change || 0) >= 0 },
+          { symbol: "USD/INR", price: data.global_markets?.["USD/INR"]?.price?.toFixed(2) || "---", change: `${data.global_markets?.["USD/INR"]?.change?.toFixed(2) || "---"} (${data.global_markets?.["USD/INR"]?.change_pct?.toFixed(2) || "---"}%)`, up: (data.global_markets?.["USD/INR"]?.change || 0) >= 0 },
+          { symbol: "GOLD", price: data.global_markets?.["GOLD"]?.price?.toFixed(2) || "---", change: `${data.global_markets?.["GOLD"]?.change?.toFixed(2) || "---"} (${data.global_markets?.["GOLD"]?.change_pct?.toFixed(2) || "---"}%)`, up: (data.global_markets?.["GOLD"]?.change || 0) >= 0 },
+          { symbol: "CRUDE", price: data.global_markets?.["CRUDE"]?.price?.toFixed(2) || "---", change: `${data.global_markets?.["CRUDE"]?.change?.toFixed(2) || "---"} (${data.global_markets?.["CRUDE"]?.change_pct?.toFixed(2) || "---"}%)`, up: (data.global_markets?.["CRUDE"]?.change || 0) >= 0 },
+        ]);
+      } catch {
+        // keep stale data
+      }
+    }
+    fetchTicker();
+    const interval = setInterval(fetchTicker, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="ticker-strip py-2 overflow-x-auto">
