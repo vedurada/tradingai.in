@@ -32,7 +32,7 @@ class OptionsCollector:
         records_updated = 0
         for symbol in ["NIFTY", "BANKNIFTY"]:
             try:
-                chain = self.provider.get_option_chain(symbol)
+                chain = self.provider.get_option_chain(symbol, "")
                 if chain:
                     repo = MarketRepository(session)
                     result = await repo.save_option_contracts(chain.call_contracts + chain.put_contracts)
