@@ -44,7 +44,7 @@ class AppConfig:
         return f"redis://{self.redis.host}:{self.redis.port}/{self.redis.database}"
 
     def get_database_url(self) -> str:
-        return self.database.url
+        return f"postgresql+asyncpg://{self.database.username}:{self.database.password}@{self.database.host}:{self.database.port}/{self.database.database}"
 
 def load_config() -> AppConfig:
     config = AppConfig()

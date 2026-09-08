@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy import text
 
 from config.config import load_config
 from utils.logging import setup_logging
@@ -104,7 +105,7 @@ def create_app(config: Optional[dict] = None) -> FastAPI:
         redis_ok = cache_service.enabled
         try:
             async with async_session() as session:
-                await session.execute("SELECT 1")
+                await session.execute(text("SELECT 1"))
         except Exception:
             db_ok = False
         return HealthStatus(
