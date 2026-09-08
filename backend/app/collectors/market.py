@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -50,7 +50,7 @@ class MarketCollector:
                 for ohlcv in ohlcv_list:
                     record = OHLCV(
                         symbol=sym, interval="5m",
-                        timestamp=datetime.fromisoformat(ohlcv["timestamp"]) if "timestamp" in ohlcv else datetime.now(timezone.utc),
+                        timestamp=datetime.fromisoformat(ohlcv["timestamp"]) if "timestamp" in ohlcv else datetime.utcnow(),
                         open=ohlcv["open"], high=ohlcv["high"],
                         low=ohlcv["low"], close=ohlcv["close"],
                         volume=ohlcv["volume"],

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,7 +21,7 @@ class NewsRepository:
             summary=article.get("summary", ""),
             sentiment=article.get("sentiment", "neutral"),
             category=article.get("category", "market"),
-            published_at=datetime.now(timezone.utc),
+            published_at=datetime.utcnow(),
         )
         self.session.add(record)
         await self.session.commit()

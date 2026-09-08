@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,7 +22,7 @@ class SignalRepository:
             stop_loss=signal.get("stop_loss"),
             rationale=signal.get("rationale"),
             is_active=signal.get("is_active", True),
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.utcnow(),
         )
         self.session.add(record)
         await self.session.commit()

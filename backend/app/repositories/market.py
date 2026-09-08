@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +14,13 @@ class MarketRepository:
         self.session = session
 
     async def save_quote(self, quote: dict) -> MarketQuote:
+        ts = quote.get("timestamp", "")
+        if ts:
+            ts_dt = datetime.fromisoformat(ts)
+            if ts_dt.tzinfo is not None:
+                ts_dt = ts_dt.replace(tzinfo=None)
+        else:
+            ts_dt = datetime.utcnow()
         record = MarketQuote(
             symbol=quote["symbol"],
             price=quote["price"],
@@ -25,7 +32,7 @@ class MarketRepository:
             previous_close=quote.get("previous_close", 0),
             volume=quote.get("volume", 0),
             market_status=quote.get("market_status", "Closed"),
-            timestamp=datetime.fromisoformat(quote["timestamp"]) if "timestamp" in quote else datetime.now(timezone.utc),
+            timestamp=ts_dt,
         )
         self.session.add(record)
         await self.session.commit()
@@ -45,14 +52,18 @@ class MarketRepository:
         return list(result.scalars().all())
 
     async def save_ohlcv(self, ohlcv: dict) -> OHLCV:
+        ts = ohlcv.get("timestamp", "")
+        if ts:
+            ts_dt = datetime.fromisoformat(ts)
+            if ts_dt.tzinfo is not None:
+                ts_dt = ts_dt.replace(tzinfo=None)
+        else:
+            ts_dt = datetime.utcnow()
         record = OHLCV(
-            symbol=ohlcv["symbol"],
-            interval=ohlcv.get("timeframe", "1d"),
-            timestamp=datetime.fromisoformat(ohlcv["timestamp"]) if "timestamp" in ohlcv else datetime.now(timezone.utc),
-            open=ohlcv["open"],
-            high=ohlcv["high"],
-            low=ohlcv["low"],
-            close=ohlcv["close"],
+            symbol=ohlcv["symbol"], interval=ohlcv.get("timeframe", "1d"),
+            timestamp=ts_dt,
+            open=ohlcv["open"], high=ohlcv["high"],
+            low=ohlcv["low"], close=ohlcv["close"],
             volume=ohlcv["volume"],
         )
         self.session.add(record)

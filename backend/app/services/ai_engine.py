@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,13 +23,13 @@ class AIEngine:
 
     def _cached(self, key: str) -> Optional[Any]:
         if key in self._cache and key in self._cache_time:
-            if (datetime.now(timezone.utc).timestamp() - self._cache_time[key]) < self._cache_ttl:
+            if (datetime.utcnow().timestamp() - self._cache_time[key]) < self._cache_ttl:
                 return self._cache[key]
         return None
 
     def _set_cache(self, key: str, value: Any) -> None:
         self._cache[key] = value
-        self._cache_time[key] = datetime.now(timezone.utc).timestamp()
+        self._cache_time[key] = datetime.utcnow().timestamp()
 
     async def analyze_market(
         self, session: AsyncSession, overview: MarketOverview
@@ -128,7 +128,7 @@ class AIEngine:
                 "VIX rises sharply",
                 "Breadth turns negative",
             ],
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.utcnow().isoformat(),
         }
 
         self._set_cache("market_analysis", analysis)
