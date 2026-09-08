@@ -1,5 +1,0 @@
-{"time": "2026-09-08 15:33:23,419", "level": "ERROR", "module": "main", "message": Market overview error: __init__() missing 11 required positional arguments: 'symbol', 'name', 'price', 'change', 'change_pct', 'open', 'high', 'low', 'previous_close', 'volume', and 'timestamp'}
-{"time": "2026-09-08 15:33:23,449", "level": "ERROR", "module": "main", "message": NIFTY error: 'MarketQuote' object has no attribute 'to_dict'}
-{"time": "2026-09-08 15:33:23,455", "level": "ERROR", "module": "main", "message": BANKNIFTY error: 'MarketQuote' object has no attribute 'to_dict'}
-{"time": "2026-09-08 15:33:23,461", "level": "ERROR", "module": "main", "message": SENSEX error: 'MarketQuote' object has no attribute 'to_dict'}
-{"time": "2026-09-08 15:33:23,467", "level": "ERROR", "module": "main", "message": VIX error: 'VIXQuote' object has no attribute 'to_dict'}
