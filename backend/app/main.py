@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -8,7 +9,6 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException, Query, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
@@ -30,20 +30,16 @@ config = load_config()
 engine = create_async_engine(config.get_database_url(), echo=False, pool_pre_ping=True)
 async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
-security = HTTPBearer(auto_error=False)
-
-
 async def get_db() -> AsyncSession:
     async with async_session() as session:
         yield session
 
 
-async def get_current_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-) -> Optional[dict]:
-    if not credentials:
+async def get_current_user(request: Request) -> Optional[dict]:
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
         return None
-    token = credentials.credentials
+    token = auth_header[7:]
     user = auth_service.validate_token(token)
     return user
 
@@ -61,8 +57,19 @@ async def get_provider() -> MarketDataProvider:
 async def lifespan(app: FastAPI):
     logger.info("Starting TradingAI API...")
     await cache_service.connect()
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    db_connected = False
+    for attempt in range(30):
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            logger.info("Database tables created")
+            db_connected = True
+            break
+        except Exception as e:
+            logger.warning(f"DB connection attempt {attempt+1} failed: {e}")
+            await asyncio.sleep(5)
+    if not db_connected:
+        logger.warning("Database not available, starting without DB")
     logger.info("TradingAI API started")
     yield
     logger.info("Shutting down TradingAI API...")
@@ -258,8 +265,6 @@ def create_app(config: Optional[dict] = None) -> FastAPI:
         current_user: Optional[dict] = Depends(get_current_user),
         provider: MarketDataProvider = Depends(get_provider),
     ):
-        if not current_user:
-            raise HTTPException(status_code=401, detail="Authentication required")
         overview = provider.get_market_overview()
         analysis = ai_service.analyze_market(overview)
         return analysis
@@ -270,8 +275,6 @@ def create_app(config: Optional[dict] = None) -> FastAPI:
         current_user: Optional[dict] = Depends(get_current_user),
         provider: MarketDataProvider = Depends(get_provider),
     ):
-        if not current_user:
-            raise HTTPException(status_code=401, detail="Authentication required")
         quote = provider.get_quote(symbol.upper())
         if not quote:
             raise HTTPException(status_code=404, detail="Symbol not found")
@@ -283,8 +286,6 @@ def create_app(config: Optional[dict] = None) -> FastAPI:
         current_user: Optional[dict] = Depends(get_current_user),
         limit: int = Query(20),
     ):
-        if not current_user:
-            raise HTTPException(status_code=401, detail="Authentication required")
         async with async_session() as session:
             repo = NewsRepository(session)
             articles = await repo.get_latest_news(limit=limit)
@@ -308,8 +309,6 @@ def create_app(config: Optional[dict] = None) -> FastAPI:
         current_user: Optional[dict] = Depends(get_current_user),
         symbol: Optional[str] = Query(None),
     ):
-        if not current_user:
-            raise HTTPException(status_code=401, detail="Authentication required")
         async with async_session() as session:
             repo = SignalRepository(session)
             signals = await repo.get_active_signals(symbol)

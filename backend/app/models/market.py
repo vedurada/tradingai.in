@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from typing import Any, Optional
+from datetime import datetime
 
 @dataclass
 class MarketQuote:
@@ -189,3 +190,112 @@ class VIXQuoteResponse:
     trend: str = "Declining"
     risk_off: bool = False
     timestamp: str = ""
+
+
+@dataclass
+class OHLCV:
+    symbol: str
+    timeframe: str
+    timestamp: datetime
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "symbol": self.symbol,
+            "timeframe": self.timeframe,
+            "timestamp": self.timestamp.isoformat(),
+            "open": self.open,
+            "high": self.high,
+            "low": self.low,
+            "close": self.close,
+            "volume": self.volume,
+        }
+
+
+@dataclass
+class OptionContract:
+    symbol: str
+    expiry: str
+    strike: float
+    option_type: str
+    last_price: float
+    open_interest: int
+    change_in_oi: int
+    volume: int
+    implied_volatility: float
+    bid: float
+    ask: float
+    delta: float
+    gamma: float
+    theta: float
+    vega: float
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "symbol": self.symbol,
+            "expiry": self.expiry,
+            "strike": self.strike,
+            "option_type": self.option_type,
+            "last_price": self.last_price,
+            "open_interest": self.open_interest,
+            "change_in_oi": self.change_in_oi,
+            "volume": self.volume,
+            "implied_volatility": self.implied_volatility,
+            "bid": self.bid,
+            "ask": self.ask,
+            "delta": self.delta,
+            "gamma": self.gamma,
+            "theta": self.theta,
+            "vega": self.vega,
+        }
+
+
+@dataclass
+class OptionChain:
+    symbol: str
+    expiry: str
+    underlying_price: float
+    call_contracts: list[Any] = field(default_factory=list)
+    put_contracts: list[Any] = field(default_factory=list)
+    timestamp: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "symbol": self.symbol,
+            "expiry": self.expiry,
+            "underlying_price": self.underlying_price,
+            "call_contracts": [c if isinstance(c, dict) else c.to_dict() for c in self.call_contracts],
+            "put_contracts": [c if isinstance(c, dict) else c.to_dict() for c in self.put_contracts],
+            "timestamp": self.timestamp,
+        }
+
+
+@dataclass
+class PCRData:
+    symbol: str
+    oi_pcr: float = 0.0
+    volume_pcr: float = 0.0
+    timestamp: str = ""
+
+
+@dataclass
+class MaxPainData:
+    symbol: str
+    expiry: str
+    max_pain: float = 0.0
+    call_max_oi_strike: float = 0.0
+    put_max_oi_strike: float = 0.0
+    timestamp: str = ""
+
+
+@dataclass
+class MarketStatus:
+    is_open: bool
+    current_phase: str
+    market_open_time: str = "09:15 IST"
+    market_close_time: str = "15:30 IST"
+    current_time: str = ""
