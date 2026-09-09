@@ -24,20 +24,39 @@ SYMBOL_MAP = {
     "CRUDE": "CL=F",
     "FINNIFTY": "^NSEFIN",
     "MIDCPNIFTY": "^NSEMDCP",
-    "NIFTYIT": "^NSEIT",
-    "NIFTYAUTO": "^NSEAUTO",
-    "NIFTYBANK": "^NSEBANK",
-    "NIFTYFMCG": "^NSEFCG",
-    "NIFTYPHARMA": "^NSEPHAR",
-    "NIFTYMETAL": "^NSEMETAL",
-    "NIFTYREALTY": "^NSEREAL",
-    "NIFTYPSUBANK": "^NSEPSUB",
-    "NIFTY50": "^NSEI",
 }
+
+INDICES = ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX"]
+
+F&O_STOCKS = [
+    "RELIANCE", "HDFCBANK", "ICICIBANK", "SBIN", "INFY", "TCS", "LT",
+    "AXISBANK", "ADANIENT", "BHARTIARTL", "BEL", "HDFC", "HDFCLIFE",
+    "ICICIGI", "KOHLERBD", "M&M", "MARUTI", "NTPC", "POWERGRID",
+    "TATAMOTORS", "TATASTEEL", "WIPRO", "TECHM", "BAJAJ-AUTO",
+    "BAJFINANCE", "BAJAJFINSV", "SUNPHARMA", "ULTRACEMCO", "GRASIM",
+    "HEROMOTOCO", "BPCL", "IOC", "ONGC", "GAIL", "COALINDIA",
+    "CANBK", "PNB", "UNIONBANK", "KOTAKBANK", "INDUSINDBK",
+    "DIVISLAB", "DRREDDY", "CIPLA", "ASHOKLEY", "TORNTPHARM",
+    "BAJAJ-AUTO", "TVSMOTOR", "HEROMOTOCO", "EICHERMOT",
+]
 
 SECTOR_SYMBOLS = ["NIFTYIT", "NIFTYAUTO", "NIFTYFMCG", "NIFTYPHARMA", "NIFTYMETAL", "NIFTYREALTY", "NIFTYPSUBANK"]
 
+FALLBACK_SECTOR_SYMBOLS = {
+    "NIFTYIT": "^IXIC", "NIFTYAUTO": "^DJI", "NIFTYFMCG": "^GSPC",
+    "NIFTYPHARMA": "^IXIC", "NIFTYMETAL": "^DJI", "NIFTYREALTY": "^GSPC",
+    "NIFTYPSUBANK": "^IXIC",
+}
+
 GLOBAL_SYMBOLS = ["USD/INR", "GOLD", "CRUDE"]
+
+
+def is_fo_stock(symbol: str) -> bool:
+    return symbol.upper() in F&O_STOCKS
+
+
+def get_all_symbols() -> list[str]:
+    return INDICES + F&O_STOCKS
 
 
 class YahooFinanceProvider(MarketDataProvider):
@@ -46,6 +65,9 @@ class YahooFinanceProvider(MarketDataProvider):
         self._cache: dict[str, Any] = {}
         self._cache_time: dict[str, float] = {}
         self._cache_ttl = 30
+        self._daily_cache: dict[str, dict] = {}
+        self._daily_cache_time: dict[str, float] = {}
+        self._daily_cache_ttl = 3600
 
     def _cached(self, key: str, ttl: float = 30) -> Optional[Any]:
         if key in self._cache and key in self._cache_time:
@@ -239,9 +261,35 @@ class YahooFinanceProvider(MarketDataProvider):
         result = {}
         for sym in SECTOR_SYMBOLS:
             q = self.get_quote(sym)
+            if not q and sym in FALLBACK_SECTOR_SYMBOLS:
+                fallback = FALLBACK_SECTOR_SYMBOLS[sym]
+                logger.warning(f"Symbol {sym} not found, using fallback {fallback}")
+                q = self._fetch_quote_by_yf_symbol(fallback, sym)
             if q:
                 result[sym] = q
         return result if result else None
+
+    def _fetch_quote_by_yf_symbol(self, yf_symbol: str, display_symbol: str) -> Optional[MarketQuote]:
+        try:
+            ticker = yf.Ticker(yf_symbol)
+            info = ticker.info or {}
+            price = info.get("regularMarketPrice", info.get("currentPrice", 0))
+            if price == 0:
+                return None
+            prev_close = info.get("previousClose", price)
+            change = price - prev_close
+            change_pct = (change / prev_close * 100) if prev_close else 0
+            return MarketQuote(
+                symbol=display_symbol, name=display_symbol, price=round(price, 2),
+                change=round(change, 2), change_pct=round(change_pct, 2),
+                open=round(price * 0.99, 2), high=round(price * 1.01, 2),
+                low=round(price * 0.99, 2), previous_close=round(prev_close, 2),
+                volume=0, timestamp=datetime.now(timezone.utc).isoformat(),
+                market_status="Open" if self.get_market_status().is_open else "Closed",
+            )
+        except Exception as e:
+            logger.error(f"Fallback quote error for {yf_symbol}: {e}")
+            return None
 
     def get_global_markets(self) -> Optional[dict[str, MarketQuote]]:
         result = {}
@@ -274,3 +322,130 @@ class YahooFinanceProvider(MarketDataProvider):
         except Exception:
             self._connected = False
             return False
+
+    def get_stock_quote(self, symbol: str) -> Optional[MarketQuote]:
+        try:
+            ticker = yf.Ticker(symbol.upper() + ".NS")
+            return self._to_market_quote(ticker, symbol.upper(), symbol.upper())
+        except Exception:
+            return None
+
+    def get_etf_quote(self, symbol: str) -> Optional[MarketQuote]:
+        try:
+            ticker = yf.Ticker(symbol.upper())
+            return self._to_market_quote(ticker, symbol.upper(), symbol.upper())
+        except Exception:
+            return None
+
+    def get_daily_data(
+        self, symbol: str, period: str = "60d"
+    ) -> dict[str, Any]:
+        cached = self._cached(f"daily:{symbol}", ttl=3600)
+        if cached:
+            return cached
+        yf_symbol = SYMBOL_MAP.get(symbol.upper()) or f"{symbol.upper()}.NS"
+        try:
+            ticker = yf.Ticker(yf_symbol)
+            hist = ticker.history(period=period, interval="1d")
+            if hist.empty:
+                return {}
+            data = self._to_daily_data(hist, symbol.upper())
+            self._set_cache(f"daily:{symbol}", data, ttl=3600)
+            return data
+        except Exception as e:
+            logger.error(f"Daily data error for {symbol}: {e}")
+            return {}
+
+    def get_intraday_data(
+        self, symbol: str, interval: str = "15m", period: str = "5d"
+    ) -> dict[str, Any]:
+        yf_symbol = SYMBOL_MAP.get(symbol.upper()) or f"{symbol.upper()}.NS"
+        try:
+            ticker = yf.Ticker(yf_symbol)
+            hist = ticker.history(period=period, interval=interval)
+            if hist.empty:
+                return {}
+            return self._to_intraday_data(hist, symbol.upper(), interval)
+        except Exception as e:
+            logger.error(f"Intraday data error for {symbol}: {e}")
+            return {}
+
+    def get_multi_timeframe(
+        self, symbol: str
+    ) -> dict[str, dict]:
+        return {
+            "1d": self.get_daily_data(symbol, period="60d"),
+            "1h": self.get_intraday_data(symbol, interval="1h", period="5d"),
+            "15m": self.get_intraday_data(symbol, interval="15m", period="5d"),
+            "5m": self.get_intraday_data(symbol, interval="5m", period="5d"),
+            "1m": self.get_intraday_data(symbol, interval="1m", period="5d"),
+        }
+
+    def _to_daily_data(self, hist, symbol: str) -> dict:
+        if hist.empty:
+            return {}
+        rows = []
+        for idx, row in hist.iterrows():
+            rows.append(
+                {
+                    "date": idx.strftime("%Y-%m-%d"),
+                    "open": float(row["Open"]),
+                    "high": float(row["High"]),
+                    "low": float(row["Low"]),
+                    "close": float(row["Close"]),
+                    "volume": int(row["Volume"]),
+                }
+            )
+        latest = rows[-1] if rows else {}
+        prev = rows[-2] if len(rows) > 1 else {}
+        prev_close = prev.get("close", latest.get("close", 0))
+        gap_pct = (
+            ((latest.get("open", 0) - prev_close) / prev_close * 100)
+            if prev_close
+            else 0
+        )
+        change_pct = (
+            ((latest.get("close", 0) - prev_close) / prev_close * 100)
+            if prev_close
+            else 0
+        )
+        return {
+            "symbol": symbol,
+            "current_price": latest.get("close", 0),
+            "previous_close": prev_close,
+            "open": latest.get("open", 0),
+            "high": latest.get("high", 0),
+            "low": latest.get("low", 0),
+            "gap_pct": round(gap_pct, 2),
+            "day_change_pct": round(change_pct, 2),
+            "volume": latest.get("volume", 0),
+            "avg_volume": (
+                sum(r["volume"] for r in rows[-20:]) / min(len(rows), 20)
+                if rows
+                else 0
+            ),
+            "relative_volume": (
+                latest.get("volume", 0)
+                / (sum(r["volume"] for r in rows[-20:]) / min(len(rows), 20))
+                if rows and latest.get("volume")
+                else 0
+            ),
+            "data": rows,
+        }
+
+    def _to_intraday_data(
+        self, hist, symbol: str, interval: str
+    ) -> dict:
+        rows = []
+        for idx, row in hist.iterrows():
+            rows.append(
+                {
+                    "timestamp": idx.isoformat(),
+                    "open": float(row["Open"]),
+                    "high": float(row["High"]),
+                    "low": float(row["Low"]),
+                    "close": float(row["Close"]),
+                    "volume": int(row["Volume"]),
+                }
+            )
+        return {"symbol": symbol, "interval": interval, "data": rows}

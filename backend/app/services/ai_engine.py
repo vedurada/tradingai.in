@@ -11,6 +11,7 @@ from sqlalchemy import select, desc
 from app.models.market import MarketOverview, MarketQuote, VIXQuote
 from app.models.db import AISignal, Scenario
 from app.repositories.market import MarketRepository
+from app.services.market_regime import market_regime_engine
 
 logger = logging.getLogger("tradingai.ai")
 
@@ -153,6 +154,138 @@ class AIEngine:
             logger.error(f"AI signal save error: {e}")
 
         return analysis
+
+    async def analyze_with_regime(
+        self, session: AsyncSession, overview: MarketOverview, indicators: Optional[dict] = None
+    ) -> dict:
+        cached = self._cached("market_analysis_regime")
+        if cached:
+            return cached
+
+        nifty = overview.nifty
+        vix = overview.vix
+
+        # Use regime engine for structured analysis
+        vwap = indicators.get("vwap", 0) if indicators else 0
+        rsi = indicators.get("rsi") if indicators else None
+        macd = indicators.get("macd") if indicators else None
+        adx = indicators.get("adx") if indicators else None
+        bollinger = indicators.get("bollinger_bands") if indicators else None
+        pivot = indicators.get("pivot") if indicators else None
+        support_resistance = indicators.get("support_resistance") if indicators else None
+
+        regime = market_regime_engine.evaluate(
+            price=nifty.price,
+            vwap=vwap,
+            prev_close=nifty.previous_close,
+            rsi=rsi,
+            macd=macd,
+            adx=adx,
+            vix_price=vix.price,
+            bollinger=bollinger,
+            pivot=pivot,
+            support_resistance=support_resistance,
+            breadth_positive=True,
+        )
+
+        # Generate scenarios based on regime
+        scenarios = market_regime_engine.generate_scenarios(
+            price=nifty.price,
+            regime=regime["regime"],
+            support_resistance=support_resistance,
+            pivot=pivot,
+            confidence=regime["confidence"],
+        )
+
+        result = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "market_regime": regime["regime"],
+            "confidence": regime["confidence"],
+            "market_bias": "BULLISH" if regime["scores"]["trend_up"] > regime["scores"]["trend_down"] else "BEARISH" if regime["scores"]["trend_down"] > regime["scores"]["trend_up"] else "NEUTRAL",
+            "summary": self._generate_summary(regime, vix, nifty),
+            "nifty": {
+                "spot": nifty.price,
+                "support": support_resistance.get("support", []) if support_resistance else [],
+                "resistance": support_resistance.get("resistance", []) if support_resistance else [],
+                "trend": regime["regime"],
+            },
+            "regime": {
+                "type": regime["regime"],
+                "confidence": regime["confidence"],
+                "trend_strength": regime["trend_strength"],
+                "momentum": regime["momentum"],
+                "volatility": regime["volatility"],
+            },
+            "evidence": regime["evidence"],
+            "primary_scenario": scenarios[0] if scenarios else {},
+            "alternative_scenario": scenarios[1] if len(scenarios) > 1 else {},
+            "risk_scenario": scenarios[2] if len(scenarios) > 2 else {},
+            "strategy_classes": self._get_strategy_classes(regime["regime"]),
+            "risk_flags": self._get_risk_flags(regime, vix),
+        }
+
+        self._set_cache("market_analysis_regime", result)
+
+        # Persist to DB
+        try:
+            signal = AISignal(
+                symbol="NIFTY", regime=regime["regime"], trend=regime["momentum"],
+                momentum=regime["momentum"], volatility=regime["volatility"],
+                breadth="POSITIVE", options_sentiment="NEUTRAL",
+                confidence=regime["confidence"],
+                reasons_bullish=json.dumps([e for e in regime["evidence"] if "bullish" in e.lower() or "up" in e.lower() or "positive" in e.lower()]),
+                reasons_bearish=json.dumps([e for e in regime["evidence"] if "bearish" in e.lower() or "down" in e.lower() or "negative" in e.lower()]),
+                warnings=json.dumps(warnings),
+                view_invalidation=json.dumps([s.get("invalidation", "") for s in scenarios]),
+                timestamp=datetime.utcnow(),
+            )
+            session.add(signal)
+            for s in scenarios:
+                scenario = Scenario(
+                    symbol="NIFTY", condition=s.get("condition", ""),
+                    scenario_type=s.get("type", ""), probability=0,
+                    description=s.get("condition", ""),
+                    timestamp=datetime.utcnow(),
+                )
+                session.add(scenario)
+            await session.commit()
+        except Exception as e:
+            logger.error(f"AI signal/scenario save error: {e}")
+
+        return result
+
+    def _generate_summary(self, regime: dict, vix: VIXQuote, nifty: MarketQuote) -> str:
+        lines = [
+            f"The current market structure shows {regime['regime'].lower()} with {regime['confidence']}% confidence.",
+            f"NIFTY is trading at {nifty.price:.2f} with {nifty.change_pct:+.2f}% change.",
+            f"VIX at {vix.price:.2f} indicates {'elevated' if vix.price > 20 else 'low' if vix.price < 13 else 'moderate'} volatility.",
+        ]
+        for ev in regime["evidence"][:5]:
+            lines.append(f"• {ev}")
+        return "\n".join(lines)
+
+    def _get_strategy_classes(self, regime: str) -> list[str]:
+        mapping = {
+            "TREND_UP": ["Bull Call Spread", "Bull Put Spread", "Covered Call"],
+            "TREND_DOWN": ["Bear Put Spread", "Bear Call Spread", "Protective Put"],
+            "RANGE": ["Iron Condor", "Short Strangle", "Butterfly Spread"],
+            "BREAKOUT": ["Long Call", "Long Straddle", "Bull Call Spread"],
+            "BREAKDOWN": ["Long Put", "Long Straddle", "Bear Put Spread"],
+            "HIGH_VOLATILITY": ["Defined-risk structures", "Avoid naked exposure"],
+            "LOW_VOLATILITY": ["Long Straddle", "Long Strangle"],
+            "OPENING_VOLATILITY": ["Wait for stabilization", "Defined-risk only"],
+        }
+        return mapping.get(regime, ["Neutral strategies"])
+
+    def _get_risk_flags(self, regime: dict, vix: VIXQuote) -> list[str]:
+        flags = []
+        if regime["volatility"] == "HIGH":
+            flags.append("Elevated volatility - reduce position size")
+        if vix.price > 25:
+            flags.append("VIX above 25 - risk-off conditions")
+        if regime["confidence"] < 60:
+            flags.append("Low confidence - avoid new positions")
+        return flags
 
     async def generate_scenarios(
         self, session: AsyncSession, overview: MarketOverview

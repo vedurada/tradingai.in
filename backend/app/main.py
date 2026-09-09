@@ -25,6 +25,20 @@ from app.services.cache import cache_service
 from app.services.auth import auth_service
 from app.services.ai import ai_service
 from app.services.scheduler import scheduler
+from app.services.technical_indicators import (
+    calculate_all_indicators,
+    calculate_vwap,
+    calculate_pivot,
+    calculate_cpr,
+    calculate_bollinger_bands,
+    calculate_rsi,
+    calculate_macd,
+    calculate_adx,
+    calculate_support_resistance,
+)
+from app.services.market_regime import market_regime_engine
+from app.services.options_intelligence import OptionsIntelligence
+from app.services.strategy_engine import strategy_engine
 from app.collectors import MarketCollector, OptionsCollector, NewsCollector, AIAnalyzer
 
 logger = setup_logging("tradingai-api")
@@ -276,6 +290,323 @@ def create_app(config: Optional[dict] = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="ETF not found")
         return quote.to_dict()
 
+    @app.get("/api/v1/technical/indicators")
+    async def get_technical_indicators(
+        symbol: str = Query(..., description="Symbol"),
+        interval: str = Query("1d", description="Timeframe"),
+        limit: int = Query(100, description="Candles"),
+    ):
+        try:
+            provider = await get_provider()
+            ohlcv_data = provider.get_ohlcv(symbol.upper(), interval, limit)
+            if not ohlcv_data:
+                raise HTTPException(status_code=404, detail="OHLCV data not found")
+            quote = provider.get_quote(symbol.upper())
+            quote_dict = quote.to_dict() if quote else {"high": 0, "low": 0, "close": 0, "price": 0}
+            result = calculate_all_indicators(ohlcv_data, quote_dict)
+            return {
+                "symbol": symbol.upper(),
+                "interval": interval,
+                "indicators": result,
+            }
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Technical indicators error: {e}")
+            raise HTTPException(status_code=500, detail="Failed to calculate indicators")
+
+    @app.get("/api/v1/technical/vwap")
+    async def get_vwap(
+        symbol: str = Query(..., description="Symbol"),
+        interval: str = Query("1d", description="Timeframe"),
+        limit: int = Query(100, description="Candles"),
+    ):
+        try:
+            provider = await get_provider()
+            ohlcv_data = provider.get_ohlcv(symbol.upper(), interval, limit)
+            if not ohlcv_data:
+                raise HTTPException(status_code=404, detail="OHLCV data not found")
+            vwap = calculate_vwap(ohlcv_data)
+            return {"symbol": symbol.upper(), "interval": interval, "vwap": vwap}
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"VWAP error: {e}")
+            raise HTTPException(status_code=500, detail="Failed to calculate VWAP")
+
+    @app.get("/api/v1/technical/pivot")
+    async def get_pivot(
+        symbol: str = Query(..., description="Symbol"),
+        interval: str = Query("1d", description="Timeframe"),
+        limit: int = Query(100, description="Candles"),
+    ):
+        try:
+            provider = await get_provider()
+            ohlcv_data = provider.get_ohlcv(symbol.upper(), interval, limit)
+            if not ohlcv_data:
+                raise HTTPException(status_code=404, detail="OHLCV data not found")
+            quote = provider.get_quote(symbol.upper())
+            quote_dict = quote.to_dict() if quote else {"high": 0, "low": 0, "close": 0, "price": 0}
+            pivot = calculate_pivot(quote_dict)
+            cpr = calculate_cpr(pivot)
+            return {"symbol": symbol.upper(), "interval": interval, "pivot": pivot, "cpr": cpr}
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Pivot error: {e}")
+            raise HTTPException(status_code=500, detail="Failed to calculate pivot")
+
+    @app.get("/api/v1/technical/bollinger")
+    async def get_bollinger(
+        symbol: str = Query(..., description="Symbol"),
+        interval: str = Query("1d", description="Timeframe"),
+        limit: int = Query(100, description="Candles"),
+        period: int = Query(20),
+        std_mult: float = Query(2.0),
+    ):
+        try:
+            provider = await get_provider()
+            ohlcv_data = provider.get_ohlcv(symbol.upper(), interval, limit)
+            if not ohlcv_data:
+                raise HTTPException(status_code=404, detail="OHLCV data not found")
+            closes = [row.get("close", 0) for row in ohlcv_data]
+            bb = calculate_bollinger_bands(closes, period, std_mult)
+            return {"symbol": symbol.upper(), "interval": interval, "bollinger_bands": bb}
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Bollinger Bands error: {e}")
+            raise HTTPException(status_code=500, detail="Failed to calculate Bollinger Bands")
+
+    @app.get("/api/v1/technical/rsi")
+    async def get_rsi(
+        symbol: str = Query(..., description="Symbol"),
+        interval: str = Query("1d", description="Timeframe"),
+        limit: int = Query(100, description="Candles"),
+        period: int = Query(14),
+    ):
+        try:
+            provider = await get_provider()
+            ohlcv_data = provider.get_ohlcv(symbol.upper(), interval, limit)
+            if not ohlcv_data:
+                raise HTTPException(status_code=404, detail="OHLCV data not found")
+            closes = [row.get("close", 0) for row in ohlcv_data]
+            rsi = calculate_rsi(closes, period)
+            return {"symbol": symbol.upper(), "interval": interval, "rsi": rsi}
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"RSI error: {e}")
+            raise HTTPException(status_code=500, detail="Failed to calculate RSI")
+
+    @app.get("/api/v1/technical/macd")
+    async def get_macd(
+        symbol: str = Query(..., description="Symbol"),
+        interval: str = Query("1d", description="Timeframe"),
+        limit: int = Query(100, description="Candles"),
+        fast: int = Query(12),
+        slow: int = Query(26),
+        signal: int = Query(9),
+    ):
+        try:
+            provider = await get_provider()
+            ohlcv_data = provider.get_ohlcv(symbol.upper(), interval, limit)
+            if not ohlcv_data:
+                raise HTTPException(status_code=404, detail="OHLCV data not found")
+            closes = [row.get("close", 0) for row in ohlcv_data]
+            macd = calculate_macd(closes, fast, slow, signal)
+            return {"symbol": symbol.upper(), "interval": interval, "macd": macd}
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"MACD error: {e}")
+            raise HTTPException(status_code=500, detail="Failed to calculate MACD")
+
+    @app.get("/api/v1/technical/adx")
+    async def get_adx(
+        symbol: str = Query(..., description="Symbol"),
+        interval: str = Query("1d", description="Timeframe"),
+        limit: int = Query(100, description="Candles"),
+        period: int = Query(14),
+    ):
+        try:
+            provider = await get_provider()
+            ohlcv_data = provider.get_ohlcv(symbol.upper(), interval, limit)
+            if not ohlcv_data:
+                raise HTTPException(status_code=404, detail="OHLCV data not found")
+            highs = [row.get("high", 0) for row in ohlcv_data]
+            lows = [row.get("low", 0) for row in ohlcv_data]
+            closes = [row.get("close", 0) for row in ohlcv_data]
+            adx = calculate_adx(highs, lows, closes, period)
+            return {"symbol": symbol.upper(), "interval": interval, "adx": adx}
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"ADX error: {e}")
+            raise HTTPException(status_code=500, detail="Failed to calculate ADX")
+
+    @app.get("/api/v1/technical/support-resistance")
+    async def get_support_resistance(
+        symbol: str = Query(..., description="Symbol"),
+        interval: str = Query("1d", description="Timeframe"),
+        limit: int = Query(100, description="Candles"),
+        window: int = Query(20),
+    ):
+        try:
+            provider = await get_provider()
+            ohlcv_data = provider.get_ohlcv(symbol.upper(), interval, limit)
+            if not ohlcv_data:
+                raise HTTPException(status_code=404, detail="OHLCV data not found")
+            sr = calculate_support_resistance(ohlcv_data, window)
+            return {"symbol": symbol.upper(), "interval": interval, "support_resistance": sr}
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Support/Resistance error: {e}")
+            raise HTTPException(status_code=500, detail="Failed to calculate support/resistance")
+
+    options_intel = OptionsIntelligence()
+
+    @app.get("/api/v1/options/intelligence")
+    async def get_options_intelligence(
+        symbol: str = Query("NIFTY", description="Symbol"),
+        expiry: str = Query("", description="Expiry filter"),
+    ):
+        try:
+            provider = await get_provider()
+            chain = provider.get_option_chain(symbol.upper(), expiry)
+            if not chain:
+                raise HTTPException(status_code=404, detail="Option chain not found")
+            contracts = [c if isinstance(c, dict) else c.to_dict() for c in chain.call_contracts + chain.put_contracts]
+            result = await options_intel.get_options_intelligence(
+                contracts, chain.underlying_price, symbol.upper()
+            )
+            return result
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Options intelligence error: {e}")
+            raise HTTPException(status_code=500, detail="Failed to fetch options intelligence")
+
+    @app.get("/api/v1/options/pcr")
+    async def get_pcr(
+        symbol: str = Query("NIFTY", description="Symbol"),
+        expiry: str = Query("", description="Expiry filter"),
+    ):
+        try:
+            provider = await get_provider()
+            chain = provider.get_option_chain(symbol.upper(), expiry)
+            if not chain:
+                raise HTTPException(status_code=404, detail="Option chain not found")
+            contracts = [c if isinstance(c, dict) else c.to_dict() for c in chain.call_contracts + chain.put_contracts]
+            call_oi = sum(c.get("open_interest", 0) for c in contracts if c.get("option_type") == "CE")
+            put_oi = sum(c.get("open_interest", 0) for c in contracts if c.get("option_type") == "PE")
+            pcr = options_intel.calculate_pcr(call_oi, put_oi)
+            return {"symbol": symbol.upper(), "pcr": pcr, "call_oi": call_oi, "put_oi": put_oi}
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"PCR error: {e}")
+            raise HTTPException(status_code=500, detail="Failed to calculate PCR")
+
+    @app.get("/api/v1/options/max-pain")
+    async def get_max_pain(
+        symbol: str = Query("NIFTY", description="Symbol"),
+        expiry: str = Query("", description="Expiry filter"),
+    ):
+        try:
+            provider = await get_provider()
+            chain = provider.get_option_chain(symbol.upper(), expiry)
+            if not chain:
+                raise HTTPException(status_code=404, detail="Option chain not found")
+            contracts = [c if isinstance(c, dict) else c.to_dict() for c in chain.call_contracts + chain.put_contracts]
+            max_pain = options_intel.calculate_max_pain(contracts)
+            return {"symbol": symbol.upper(), "max_pain": max_pain}
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Max pain error: {e}")
+            raise HTTPException(status_code=500, detail="Failed to calculate max pain")
+
+    @app.get("/api/v1/options/iv")
+    async def get_iv(
+        symbol: str = Query("NIFTY", description="Symbol"),
+        expiry: str = Query("", description="Expiry filter"),
+    ):
+        try:
+            provider = await get_provider()
+            chain = provider.get_option_chain(symbol.upper(), expiry)
+            if not chain:
+                raise HTTPException(status_code=404, detail="Option chain not found")
+            contracts = [c if isinstance(c, dict) else c.to_dict() for c in chain.call_contracts + chain.put_contracts]
+            iv_stats = options_intel.calculate_iv_stats(contracts)
+            return {"symbol": symbol.upper(), "iv_stats": iv_stats}
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"IV error: {e}")
+            raise HTTPException(status_code=500, detail="Failed to calculate IV stats")
+
+    @app.get("/api/v1/options/weekly-analysis")
+    async def get_weekly_analysis(
+        symbol: str = Query("NIFTY", description="Symbol"),
+        expiry: str = Query("", description="Expiry filter"),
+    ):
+        try:
+            provider = await get_provider()
+            chain = provider.get_option_chain(symbol.upper(), expiry)
+            if not chain:
+                raise HTTPException(status_code=404, detail="Option chain not found")
+            contracts = [c if isinstance(c, dict) else c.to_dict() for c in chain.call_contracts + chain.put_contracts]
+            result = await options_intel.get_options_intelligence(
+                contracts, chain.underlying_price, symbol.upper()
+            )
+            return result
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Weekly analysis error: {e}")
+            raise HTTPException(status_code=500, detail="Failed to analyze weekly options")
+
+    @app.get("/api/v1/strategy/decision-matrix")
+    async def get_strategy_decision_matrix(
+        current_user: Optional[dict] = Depends(get_current_user),
+    ):
+        matrix = [
+            {"market_condition": "Strong bullish trend", "strategy_family": "Call Debit Spread", "risk_level": "Medium"},
+            {"market_condition": "Moderate bullish", "strategy_family": "Put Credit Spread", "risk_level": "Low"},
+            {"market_condition": "Strong bearish trend", "strategy_family": "Put Debit Spread", "risk_level": "Medium"},
+            {"market_condition": "Moderate bearish", "strategy_family": "Call Credit Spread", "risk_level": "Low"},
+            {"market_condition": "Tight range + low volatility", "strategy_family": "Iron Condor", "risk_level": "Low"},
+            {"market_condition": "Expected breakout + low IV", "strategy_family": "Long Straddle/Strangle", "risk_level": "High"},
+            {"market_condition": "High IV + range", "strategy_family": "Defined-risk premium selling", "risk_level": "Medium"},
+            {"market_condition": "Extreme volatility", "strategy_family": "Reduce risk / wait", "risk_level": "High"},
+            {"market_condition": "Conflicting signals", "strategy_family": "No trade", "risk_level": "N/A"},
+            {"market_condition": "Poor liquidity", "strategy_family": "No trade", "risk_level": "N/A"},
+        ]
+        return {"decision_matrix": matrix}
+
+    @app.get("/api/v1/strategy/options")
+    async def get_strategy_options(
+        current_user: Optional[dict] = Depends(get_current_user),
+        provider: MarketDataProvider = Depends(get_provider),
+        symbol: str = Query("NIFTY", description="Symbol for strategy"),
+    ):
+        try:
+            data = provider.get_daily_data(symbol.upper())
+            if not data:
+                raise HTTPException(status_code=404, detail="Daily data not found")
+            vix = provider.get_vix()
+            data["vix_price"] = vix.price if vix else 0
+            analysis = ai_service.generate_daily_analysis(symbol.upper(), data)
+            strategy = strategy_engine.select_strategy(analysis)
+            return strategy
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Strategy options error: {e}")
+            raise HTTPException(status_code=500, detail="Failed to generate strategy options")
+
     @app.post("/api/v1/auth/register")
     async def register(username: str = Query(...), password: str = Query(...), role: str = Query("user")):
         ok = auth_service.register(username, password, role)
@@ -341,6 +672,49 @@ def create_app(config: Optional[dict] = None) -> FastAPI:
             overview = provider.get_market_overview()
             analysis = await ai_engine.analyze_market(session, overview)
         return analysis
+
+    @app.get("/api/v1/ai/regime-enhanced")
+    async def get_regime_enhanced(
+        current_user: Optional[dict] = Depends(get_current_user),
+        provider: MarketDataProvider = Depends(get_provider),
+        symbol: str = Query("NIFTY", description="Symbol for indicators"),
+    ):
+        async with async_session() as session:
+            overview = provider.get_market_overview()
+
+            # Fetch technical indicators
+            indicators = None
+            try:
+                ohlcv_data = provider.get_ohlcv(symbol.upper(), "1d", 20)
+                if ohlcv_data:
+                    quote = provider.get_quote(symbol.upper())
+                    quote_dict = quote.to_dict() if quote else {"high": 0, "low": 0, "close": 0, "price": 0}
+                    indicators = calculate_all_indicators(ohlcv_data, quote_dict)
+            except Exception as e:
+                logger.error(f"Indicators error for regime: {e}")
+
+            analysis = await ai_engine.analyze_with_regime(session, overview, indicators)
+        return analysis
+
+    @app.get("/api/v1/ai/daily-analysis")
+    async def get_daily_analysis(
+        current_user: Optional[dict] = Depends(get_current_user),
+        provider: MarketDataProvider = Depends(get_provider),
+        symbol: str = Query("NIFTY", description="Symbol for analysis"),
+    ):
+        try:
+            data = provider.get_daily_data(symbol.upper())
+            if not data:
+                raise HTTPException(status_code=404, detail="Daily data not found")
+            vix = provider.get_vix()
+            data["vix_price"] = vix.price if vix else 0
+            analysis = ai_service.generate_daily_analysis(symbol.upper(), data)
+            return analysis
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Daily analysis error: {e}")
+            raise HTTPException(status_code=500, detail="Failed to generate daily analysis")
 
     @app.get("/api/v1/ai/signals")
     async def get_ai_signals(
