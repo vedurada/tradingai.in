@@ -1,0 +1,8 @@
+[Unit]
+Description=TradingAI pre-market Zerodha token check
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/tradingai/premarket_token_check.sh

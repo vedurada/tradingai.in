@@ -1,0 +1,10 @@
+[Unit]
+Description=Run TradingAI Zerodha token check before market open
+
+[Timer]
+OnCalendar=Mon..Fri 08:45:00 Asia/Kolkata
+Persistent=true
+Unit=tradingai-token-check.service
+
+[Install]
+WantedBy=timers.target
