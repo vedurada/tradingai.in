@@ -1,0 +1,43 @@
+[Unit]
+Description=TradingAI SMA3 Trail ATM CE/PE BUY-ONLY Trail Scanner (5s)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=sma3trail
+Group=ubuntu
+WorkingDirectory=/opt/tradingai
+Environment=SMA3_TRAIL_DB_PATH=/opt/tradingai/database/sma3_trail.db
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONPATH=/opt/tradingai/sma3_trail_lib
+ExecStart=/usr/bin/python3 /opt/tradingai/sma3_trail_scanner/app/live_sma3_trail_scanner.py
+Restart=always
+RestartSec=5
+StandardOutput=append:/opt/tradingai/logs/live_sma3_trail_scanner.log
+StandardError=append:/opt/tradingai/logs/live_sma3_trail_scanner.log
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RemoveIPC=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+CapabilityBoundingSet=
+AmbientCapabilities=
+ReadWritePaths=/opt/tradingai/database /opt/tradingai/logs
+ReadOnlyPaths=/opt/tradingai/sma3_trail_scanner /opt/tradingai/sma3_trail_lib
+UMask=0007
+
+[Install]
+WantedBy=multi-user.target
