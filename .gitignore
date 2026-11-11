@@ -39,3 +39,16 @@ lib/
 .idea/
 *.swp
 *.swo
+
+# Node.js / Frontend
+node_modules/
+.next/
+dist/
+build/
+
+# Python packaging
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
