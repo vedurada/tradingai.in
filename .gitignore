@@ -1,0 +1,41 @@
+# Secrets and credentials - NEVER commit these
+.env*
+.env.*.*
+request_token.txt
+*.key
+*.pem
+*.secret
+*credentials*
+*credential*
+
+# Databases and runtime state
+*.db
+*.db-shm
+*.db-wal
+cache.db
+instruments.json
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Virtual environments
+venv/
+.env/
+lib/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
