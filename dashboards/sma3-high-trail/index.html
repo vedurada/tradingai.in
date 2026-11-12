@@ -90,7 +90,7 @@
     <table>
         <thead>
             <tr>
-                <th>Time</th><th>Type</th><th>Strike</th><th>Entry</th><th>Exit</th><th>P&L</th><th>Reason</th><th>Candle</th>
+                <th>Entry Time</th><th>Exit Time</th><th>Type</th><th>Strike</th><th>Entry</th><th>Exit</th><th>P&L</th><th>Reason</th><th>Candle</th>
             </tr>
         </thead>
         <tbody id="today-tbody"></tbody>
@@ -108,7 +108,7 @@
     <table>
         <thead>
             <tr>
-                <th>Signal Time</th><th>Type</th><th>Strike</th><th>Entry</th><th>Exit</th><th>P&L</th><th>Reason</th><th>Entry Candle</th><th>Trade ID</th>
+                <th>Signal Time</th><th>Exit Time</th><th>Type</th><th>Strike</th><th>Entry</th><th>Exit</th><th>P&L</th><th>Reason</th><th>Entry Candle</th><th>Trade ID</th>
             </tr>
         </thead>
         <tbody id="signal-tbody"></tbody>
@@ -166,6 +166,7 @@ function renderTrades(tbodyId, trades, scope) {
         const pnl = t.pnl_points || 0;
         const tr = `<tr>
             <td class="mono">${t.entry_timestamp ? t.entry_timestamp.slice(11,19) : "--"}</td>
+            <td class="mono">${t.exit_timestamp ? t.exit_timestamp.slice(11,19) : "--"}</td>
             <td>${t.option_type}</td>
             <td>${t.strike}</td>
             <td>${n(t.entry_price || 0)}</td>
@@ -187,6 +188,7 @@ function renderSignals(signals) {
         if (p > 0) wins++; else if (p < 0) losses++;
         const tr = `<tr>
             <td class="mono">${t.signal_timestamp ? t.signal_timestamp.slice(11,19) : "--"}</td>
+            <td class="mono">${t.exit_timestamp ? t.exit_timestamp.slice(11,19) : "--"}</td>
             <td>${t.option_type}</td>
             <td>${t.strike}</td>
             <td>${n(t.entry_price || 0)}</td>

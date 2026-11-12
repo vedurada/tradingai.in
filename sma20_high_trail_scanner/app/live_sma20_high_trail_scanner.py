@@ -834,7 +834,7 @@ class TrailLiveScanner:
                 if stop_hit is not None:
                     # Exit price is the actual sampled LTP at the breach.
                     exit_px = round(float(ltp), 2)
-                    trade = state.close(pos.entry_candle_end, exit_px,
+                    trade = state.close(now, exit_px,
                                         "TRAIL_STOP_EXIT")
                     save_trade(trade)
                     delete_open_position(opt)
