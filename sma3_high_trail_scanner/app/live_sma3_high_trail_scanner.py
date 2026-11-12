@@ -262,6 +262,16 @@ def init_db():
         );
         """
     )
+    # Idempotent migration: add be_locked to open_positions for existing DBs.
+    try:
+        cols = [r[1] for r in conn.execute(
+            f"PRAGMA table_info(sma3_high_trail_open_positions)").fetchall()]
+        if "be_locked" not in cols:
+            conn.execute(
+                f"ALTER TABLE sma3_high_trail_open_positions "
+                "ADD COLUMN be_locked INTEGER NOT NULL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     conn.close()
 
@@ -289,15 +299,15 @@ def save_open_position(pos):
                (option_type, trade_id, strike, expiry, token, tradingsymbol,
                 entry_timestamp, entry_candle_start, entry_candle_end,
                 entry_price, prev_high, current_open, breakout, ltp_at_entry,
-                hwm, stop, updated_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                hwm, stop, be_locked, updated_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 pos.option_type, pos.trade_id, pos.strike, pos.expiry, pos.token,
                 pos.tradingsymbol, pos.entry_timestamp.isoformat(),
                 pos.entry_candle_start.isoformat(), pos.entry_candle_end.isoformat(),
                 pos.entry_price, pos.prev_high, pos.current_open,
                 1 if pos.breakout else 0, pos.ltp_at_entry,
-                pos.hwm, pos.stop,
+                pos.hwm, pos.stop, 1 if pos.be_locked else 0,
                 now_ist().isoformat(),
             ),
         )
@@ -342,6 +352,7 @@ def load_open_positions():
             ltp_at_entry=d["ltp_at_entry"],
             hwm=d["hwm"],
             stop=d["stop"],
+            be_locked=bool(d["be_locked"]),
         )
     return result
 

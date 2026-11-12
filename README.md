@@ -16,6 +16,9 @@ status API. A trail scanner owns only the exit.
 - Stop is **inactive** until the option trades **+5 points** above entry
 - At activation, stop is set at **entry price** (breakeven)
 - Thereafter, stop = `high_water_mark - 5`, ratcheting up only
+- **One-time breakeven lock:** once profit reaches **+6 points**, the stop is
+  set to `entry + 2` exactly once; the normal trail then continues ratcheting
+  from the locked stop
 - **Exit at stop only if stop is above entry price** (profitable lock)
 - Breakeven or loss stops are **ignored** — trade runs to candle close
 - Otherwise, exit at the entry 5-minute candle close

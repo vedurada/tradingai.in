@@ -26,6 +26,8 @@ SMA_PERIOD = 3
 CANDLE_MINUTES = 5
 TRAIL = 5.0
 ACTIVATE = 5.0
+BE_LOCK_PROFIT = 6.0
+BE_LOCK_STOP = 2.0
 STRATEGY_ID = "sma3_high_trail"
 STRATEGY_VERSION = "2.0.0"
 STRATEGY_TYPE = "SMA_HIGH_BUY_ONLY"
@@ -219,6 +221,7 @@ class Position:
     ltp_at_entry: float
     hwm: float = 0.0
     stop: Optional[float] = None
+    be_locked: bool = False
 
     def as_dict(self):
         d = self.__dict__.copy()
@@ -240,16 +243,30 @@ class Position:
         (a profitable lock).  If the stop is at or below entry
         (breakeven / loss), we do NOT exit -- the trade runs to candle
         close instead.
+
+        Trail sequence:
+          * inactive until hwm - entry >= ACTIVATE (+5): stop = entry
+            (breakeven), then stop = max(stop, hwm - TRAIL) ratcheting up.
+          * one-time breakeven lock: when hwm - entry >= BE_LOCK_PROFIT (+6)
+            and not already locked, set stop = max(stop, entry + BE_LOCK_STOP)
+            (+2) exactly once, then let the normal trail continue from there.
         """
         if ltp is None:
             return None
         if ltp > self.hwm:
             self.hwm = ltp
+        # Existing trail activation at +ACTIVATE (breakeven at entry).
         if self.hwm - self.entry_price >= ACTIVATE:
             if self.stop is None:
                 self.stop = self.entry_price  # breakeven at activation
             else:
                 self.stop = max(self.stop, self.hwm - TRAIL)
+        # One-time breakeven lock at +BE_LOCK_PROFIT: lock in +BE_LOCK_STOP.
+        if (not self.be_locked
+                and self.hwm - self.entry_price >= BE_LOCK_PROFIT):
+            base_stop = self.stop if self.stop is not None else self.entry_price
+            self.stop = max(base_stop, self.entry_price + BE_LOCK_STOP)
+            self.be_locked = True
         # Only exit when the stop itself is profitable (stop > entry).
         # Breakeven or loss stops are ignored; hold until candle close.
         if (self.stop is not None

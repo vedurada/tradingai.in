@@ -51,6 +51,11 @@ hwm = max(hwm, LTP)
 if hwm - entry >= ACTIVATE (5.0):
     stop = entry                      # first activation = breakeven
     stop = max(stop, hwm - TRAIL)     # ratchet up only
+# One-time breakeven lock: once profit reaches +6, lock in +2 exactly once;
+# the normal trail then continues ratcheting from the locked stop.
+if hwm - entry >= 6.0 and not be_locked:
+    stop = max(stop, entry + 2.0)
+    be_locked = True
 if stop is not None and stop > entry and LTP <= stop:
     exit at round(LTP, 2)             # actual sampled LTP at breach
     reason = TRAIL_STOP_EXIT
@@ -59,12 +64,15 @@ else:
 ```
 
 - `TRAIL = 5.0`, `ACTIVATE = 5.0`.
+- One-time breakeven lock: at +6 pts profit the stop is set to entry + 2 pts
+  exactly once (`be_locked`), after which the normal `hwm - TRAIL` trail
+  continues ratcheting up only.
 - There is **no stop-loss**. A breakeven or losing stop is ignored; the trade
   runs to candle close.
 - The exit price is the actual LTP sampled at the breach, not the idealized
   stop level.
-- `hwm` and `stop` are persisted in `open_positions`, so a restart resumes the
-  trail correctly.
+- `hwm`, `stop` and `be_locked` are persisted in `open_positions`, so a
+  restart resumes the trail correctly.
 
 ## Configuration
 

@@ -83,6 +83,16 @@ def init_db():
         );
         """
     )
+    # Idempotent migration: add be_locked to open_positions for existing DBs.
+    try:
+        cols = [r[1] for r in conn.execute(
+            f"PRAGMA table_info(sma3_trail_open_positions)").fetchall()]
+        if "be_locked" not in cols:
+            conn.execute(
+                f"ALTER TABLE sma3_trail_open_positions "
+                "ADD COLUMN be_locked INTEGER NOT NULL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     conn.close()
 

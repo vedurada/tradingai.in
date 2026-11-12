@@ -309,6 +309,11 @@ hwm  = max(hwm, LTP)
 if hwm - entry >= ACTIVATE (5.0):
     stop = entry            # first activation: breakeven
     stop = max(stop, hwm - TRAIL)   # ratchet up only
+# One-time breakeven lock: once profit reaches +6, lock in entry + 2 exactly
+# once; the normal trail then continues ratcheting from the locked stop.
+if hwm - entry >= 6.0 and not be_locked:
+    stop = max(stop, entry + 2.0)
+    be_locked = True
 if stop is not None and stop > entry and LTP <= stop:
     exit at round(LTP, 2)   # actual sampled LTP at breach
     reason = TRAIL_STOP_EXIT
@@ -317,12 +322,15 @@ else:
 ```
 
 - `TRAIL = 5.0`, `ACTIVATE = 5.0`.
+- One-time breakeven lock: at +6 pts profit the stop is set to entry + 2 pts
+  exactly once (`be_locked`), after which the normal `hwm - TRAIL` trail
+  continues ratcheting up only.
 - There is **no stop-loss**. A breakeven or losing stop is ignored; the trade
   runs to candle close.
 - Exit price is the **actual LTP sampled at the breach**, not the idealized
   stop level (models slippage).
-- `hwm` and `stop` are persisted in the open-position row, so a restart
-  resumes the trail correctly.
+- `hwm`, `stop` and `be_locked` are persisted in the open-position row, so a
+  restart resumes the trail correctly.
 
 ---
 
@@ -352,7 +360,7 @@ Family-specific columns:
 | Base SMA | `sma{n}_value` (`sma3_value` / `sma9_value` / `sma20_value`), `prev_close`, `condition_a`, `condition_b` |
 | HIGH | `sma_value`, `prev_high`, `condition_a`, `condition_b`, `condition_c` |
 | NO-SMA | `prev_high`, `breakout` |
-| Trail | `prev_high`, `breakout`, and `hwm`, `stop` in `open_positions`; base trade id in `consumed_base_trades` |
+| Trail | `prev_high`, `breakout`, and `hwm`, `stop`, `be_locked` in `open_positions`; base trade id in `consumed_base_trades` |
 
 `exit_reason` is `SAME_CANDLE_EXIT` or `TRAIL_STOP_EXIT`.
 `pnl_points = exit_price - entry_price` (BUY-only, one lot notional is not
