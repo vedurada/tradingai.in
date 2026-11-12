@@ -16,9 +16,9 @@ running on the TradingAI VM.
 | 1 | `sma3` | Base SMA | prev close > SMA3 **or** forming open > SMA3, and LTP > SMA3 | entry-candle close |
 | 2 | `sma9` | Base SMA | prev close > SMA9 **or** forming open > SMA9, and LTP > SMA9 | entry-candle close |
 | 3 | `sma20` | Base SMA | prev close > SMA20 **or** forming open > SMA20, and LTP > SMA20 | entry-candle close |
-| 4 | `sma3_high` | HIGH | forming open > SMA3 **and** LTP > prev candle high **and** LTP > SMA3 | entry-candle close |
-| 5 | `sma9_high` | HIGH | forming open > SMA9 **and** LTP > prev candle high **and** LTP > SMA9 | entry-candle close |
-| 6 | `sma20_high` | HIGH | forming open > SMA20 **and** LTP > prev candle high **and** LTP > SMA20 | entry-candle close |
+| 4 | `sma3_high` | HIGH | prev close > SMA3 **and** LTP > prev candle high **and** LTP > SMA3 | entry-candle close |
+| 5 | `sma9_high` | HIGH | prev close > SMA9 **and** LTP > prev candle high **and** LTP > SMA9 | entry-candle close |
+| 6 | `sma20_high` | HIGH | prev close > SMA20 **and** LTP > prev candle high **and** LTP > SMA20 | entry-candle close |
 | 7 | `no_sma` | NO-SMA | LTP > previous completed candle high | entry-candle close |
 | 8 | `sma3_trail` | Trail | inherits `sma3` | 5-pt trailing stop, else candle close |
 | 9 | `sma9_trail` | Trail | inherits `sma9` | 5-pt trailing stop, else candle close |
@@ -219,16 +219,16 @@ the API at the same instant.
 | `sma3` | `sma3_only` | `SMA3_BUY_ONLY` | 3.0.0 | 3 | — | 0 | `sma3` | `tradingai-sma3-scanner` |
 | `sma9` | `sma9_only` | `SMA9_BUY_ONLY` | 2.0.0 | 9 | — | 0 | `sma9` | `tradingai-sma9-scanner` |
 | `sma20` | `sma20_only` | `SMA20_BUY_ONLY` | 20.0.0 | 20 | — | 0 | `sma20` | `tradingai-sma20-scanner` |
-| `sma3_high` | `sma3_high` | `SMA3_HIGH_BUY_ONLY` | 1.0.0 | 3 | — | 1.2 | `sma3high` | `tradingai-sma3-high-scanner` |
-| `sma9_high` | `sma9_high` | `SMA9_HIGH_BUY_ONLY` | 1.0.0 | 9 | — | 2.4 | `sma9high` | `tradingai-sma9-high-scanner` |
-| `sma20_high` | `sma20_high` | `SMA20_HIGH_BUY_ONLY` | 1.0.0 | 20 | — | 3.6 | `sma20high` | `tradingai-sma20-high-scanner` |
+| `sma3_high` | `sma3_high` | `SMA3_HIGH_BUY_ONLY` | 1.1.0 | 3 | — | 1.2 | `sma3high` | `tradingai-sma3-high-scanner` |
+| `sma9_high` | `sma9_high` | `SMA9_HIGH_BUY_ONLY` | 1.1.0 | 9 | — | 2.4 | `sma9high` | `tradingai-sma9-high-scanner` |
+| `sma20_high` | `sma20_high` | `SMA20_HIGH_BUY_ONLY` | 1.1.0 | 20 | — | 3.6 | `sma20high` | `tradingai-sma20-high-scanner` |
 | `no_sma` | `no_sma` | `NO_SMA_BUY_ONLY` | 1.0.0 | — | — | 0 | `nosma` | `tradingai-no-sma-scanner` |
 | `sma3_trail` | `sma3_trail` | `SMA_BUY_ONLY` | 1.0.0 | 3 | 5.0 / 5.0 | 0.6 | `sma3trail` | `tradingai-sma3_trail-scanner` |
 | `sma9_trail` | `sma9_trail` | `SMA_BUY_ONLY` | 1.0.0 | 9 | 5.0 / 5.0 | 1.2 | `sma9trail` | `tradingai-sma9_trail-scanner` |
 | `sma20_trail` | `sma20_trail` | `SMA_BUY_ONLY` | 1.0.0 | 20 | 5.0 / 5.0 | 1.8 | `sma20trail` | `tradingai-sma20_trail-scanner` |
-| `sma3_high_trail` | `sma3_high_trail` | `SMA_HIGH_BUY_ONLY` | 1.0.0 | 3 | 5.0 / 5.0 | 2.4 | `sma3trailhigh` | `tradingai-sma3_high_trail-scanner` |
-| `sma9_high_trail` | `sma9_high_trail` | `SMA_HIGH_BUY_ONLY` | 1.0.0 | 9 | 5.0 / 5.0 | 3.0 | `sma9trailhigh` | `tradingai-sma9_high_trail-scanner` |
-| `sma20_high_trail` | `sma20_high_trail` | `SMA_HIGH_BUY_ONLY` | 1.0.0 | 20 | 5.0 / 5.0 | 3.6 | `sma20trailhigh` | `tradingai-sma20_high_trail-scanner` |
+| `sma3_high_trail` | `sma3_high_trail` | `SMA_HIGH_BUY_ONLY` | 1.1.0 | 3 | 5.0 / 5.0 | 2.4 | `sma3trailhigh` | `tradingai-sma3_high_trail-scanner` |
+| `sma9_high_trail` | `sma9_high_trail` | `SMA_HIGH_BUY_ONLY` | 1.1.0 | 9 | 5.0 / 5.0 | 3.0 | `sma9trailhigh` | `tradingai-sma9_high_trail-scanner` |
+| `sma20_high_trail` | `sma20_high_trail` | `SMA_HIGH_BUY_ONLY` | 1.1.0 | 20 | 5.0 / 5.0 | 3.6 | `sma20trailhigh` | `tradingai-sma20_high_trail-scanner` |
 | `no_sma_trail` | `no_sma_trail` | `PREV_HIGH_BUY_ONLY` | 1.0.0 | — | 5.0 / 5.0 | 4.2 | `nosmatrail` | `tradingai-no_sma_trail-scanner` |
 
 DB path is always `/opt/tradingai/database/<key>.db`.
@@ -258,7 +258,7 @@ Entry may fire on any 5-second poll while the signal holds. No stop-loss.
 ### 5.2 HIGH (`sma3_high`, `sma9_high`, `sma20_high`)
 
 ```
-condition_a  = forming.open > SMA_N
+condition_a  = prev.close > SMA_N
 condition_b  = LTP > prev.high
 confirmation = LTP > SMA_N
 signal       = condition_a AND condition_b AND confirmation
@@ -266,9 +266,9 @@ entry        = paper BUY at round(LTP, 2)
 exit         = at the close of the entry candle
 ```
 
-This is the strict variant: the current candle must open above the SMA, the
-live premium must break the previous candle high, and it must also be above
-the SMA. No stop-loss.
+This is the strict variant: the previous completed candle must close above
+the SMA, the live premium must break the previous candle high, and it must
+also be above the SMA. The forming candle's open is not used. No stop-loss.
 
 ### 5.3 NO-SMA (`no_sma`)
 

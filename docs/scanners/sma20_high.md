@@ -10,8 +10,8 @@
 | Family | HIGH breakout scanner |
 | Strategy id | `sma20_high` |
 | Strategy type | `SMA20_HIGH_BUY_ONLY` |
-| Strategy version | `1.0.0` |
-| Package VERSION file | `1.0.0-2026-11-09` |
+| Strategy version | `1.1.0` |
+| Package VERSION file | `1.1.0-2026-11-12` |
 | Service unit | `tradingai-sma20-high-scanner.service` |
 | Service user / group | `sma20high` / `ubuntu` |
 | Database | `/opt/tradingai/database/sma20_high.db` |
@@ -26,7 +26,7 @@ candles except the still-forming last one; `prev` = the last completed candle;
 `SMA20` = mean of the last 20 completed closes.
 
 ```
-condition_a  = forming.open > SMA20
+condition_a  = prev.close > SMA20
 condition_b  = LTP > prev.high
 confirmation = LTP > SMA20
 signal       = condition_a AND condition_b AND confirmation
@@ -46,7 +46,7 @@ There is no stop-loss and no carry-forward.
 |---|---|
 | `STRATEGY_ID` | `sma20_high` |
 | `STRATEGY_TYPE` | `SMA20_HIGH_BUY_ONLY` |
-| `STRATEGY_VERSION` | `1.0.0` |
+| `STRATEGY_VERSION` | `1.1.0` |
 | `SMA_PERIOD` | `20` |
 | `CANDLE_MINUTES` | `5` |
 | `POLL_SECONDS` | `5` |

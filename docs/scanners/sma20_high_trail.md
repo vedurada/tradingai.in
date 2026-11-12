@@ -10,8 +10,8 @@
 | Family | Trail variant of the HIGH scanner |
 | Strategy id | `sma20_high_trail` |
 | Strategy type | `SMA_HIGH_BUY_ONLY` |
-| Strategy version | `1.0.0` |
-| Package VERSION file | `1.0.0` |
+| Strategy version | `1.1.0` |
+| Package VERSION file | `1.1.0` |
 | Service unit | `tradingai-sma20_high_trail-scanner.service` |
 | Service user / group | `sma20trailhigh` / `ubuntu` |
 | Database | `/opt/tradingai/database/sma20_high_trail.db` |
@@ -28,7 +28,7 @@ candles except the still-forming last one; `prev` = the last completed candle;
 `SMA20` = mean of the last 20 completed closes.
 
 ```
-condition_a  = forming.open > SMA20
+condition_a  = prev.close > SMA20
 condition_b  = LTP > prev.high
 confirmation = LTP > SMA20
 signal       = condition_a AND condition_b AND confirmation
@@ -69,7 +69,7 @@ else:
 |---|---|
 | `STRATEGY_ID` | `sma20_high_trail` |
 | `STRATEGY_TYPE` | `SMA_HIGH_BUY_ONLY` |
-| `STRATEGY_VERSION` | `1.0.0` |
+| `STRATEGY_VERSION` | `1.1.0` |
 | `SMA_PERIOD` | `20` |
 | `CANDLE_MINUTES` | `5` |
 | `POLL_SECONDS` | `5` |

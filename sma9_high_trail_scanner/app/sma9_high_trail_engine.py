@@ -171,15 +171,20 @@ def evaluate_option(candles, option_type, ltp=None):
             ev.reason = "waiting for signal"
     elif entry_type == "sma_high":
         ev.condition_a = sma is not None and prev["close"] > sma
-        ev.condition_b = sma is not None and forming["open"] > sma
-        ev.qualified = ev.condition_a or ev.condition_b
-        ev.breakout = ltp is not None and ltp > prev["high"]
-        ev.confirmation = bool(ev.breakout)
+        ev.condition_b = ltp is not None and ltp > prev["high"]
+        ev.qualified = ev.condition_a and ev.condition_b
+        ev.confirmation = ltp is not None and sma is not None and ltp > sma
         ev.signal = bool(ev.qualified and ev.confirmation)
         if ltp is None:
             ev.reason = "LTP unavailable"
+        elif not ev.condition_a:
+            ev.reason = f"not qualified: prev_close<=SMA"
+        elif not ev.condition_b:
+            ev.reason = f"prev_close above SMA; waiting for LTP>prev_high"
+        elif not ev.confirmation:
+            ev.reason = f"LTP above prev_high but not above SMA"
         elif ev.signal:
-            ev.reason = "BUY signal: qualified and LTP>prev_high"
+            ev.reason = f"BUY signal: prev_close>SMA and LTP>prev_high and LTP>SMA"
         else:
             ev.reason = "waiting for signal"
     else:
