@@ -10,8 +10,8 @@
 | Family | Trail variant of the HIGH scanner |
 | Strategy id | `sma20_high_trail` |
 | Strategy type | `SMA_HIGH_BUY_ONLY` |
-| Strategy version | `1.1.0` |
-| Package VERSION file | `1.1.0` |
+| Strategy version | `2.0.0` |
+| Package VERSION file | `2.0.0` |
 | Service unit | `tradingai-sma20_high_trail-scanner.service` |
 | Service user / group | `sma20trailhigh` / `ubuntu` |
 | Database | `/opt/tradingai/database/sma20_high_trail.db` |
@@ -21,23 +21,31 @@
 
 ## Entry rule
 
-Entry is inherited unchanged from the base scanner `sma20_high`.
+Entry signals are **consumed from the base scanner `sma20_high`**. The trail scanner polls the base scanner's local status API every tick and, when the base has a new open position, copies that trade exactly once: same option type, strike, expiry, token, entry price, entry timestamp and entry candle.
+
+```
+GET https://127.0.0.1/api/sma20-high/scanner-status
+Host: tradingai.in
+```
+
+A consumed base trade id is recorded in `sma20_high_trail_consumed_base_trades`, so a trail-stop exit never re-enters the same base trade while the base scanner is still holding it to candle close. The base scanner's own entry rule (shown below) is the single source of truth:
 
 Candles are 5-minute **option-premium** candles. `completed` = all
 candles except the still-forming last one; `prev` = the last completed candle;
 `SMA20` = mean of the last 20 completed closes.
 
 ```
-condition_a  = prev.close > SMA20
-condition_b  = LTP > prev.high
-confirmation = LTP > SMA20
-signal       = condition_a AND condition_b AND confirmation
+condition_a = prev.close > SMA20
+condition_c = forming.open > SMA20
+condition_b = LTP > prev.high
+signal      = condition_a AND condition_c AND condition_b
 ```
 
-The entry may fire on any 5-second poll while all three conditions hold. The
-paper fill is `round(LTP, 2)`.
+All three conditions must be true; there is **no separate LTP > SMA
+confirmation gate**. The entry may fire on any 5-second poll while the signal
+holds. The paper fill is `round(LTP, 2)`.
 
-The entry logic is identical to `sma20_high`; only the exit differs.
+Only the exit differs from the base scanner.
 
 ## Exit rule
 
@@ -69,7 +77,7 @@ else:
 |---|---|
 | `STRATEGY_ID` | `sma20_high_trail` |
 | `STRATEGY_TYPE` | `SMA_HIGH_BUY_ONLY` |
-| `STRATEGY_VERSION` | `1.1.0` |
+| `STRATEGY_VERSION` | `2.0.0` |
 | `SMA_PERIOD` | `20` |
 | `CANDLE_MINUTES` | `5` |
 | `POLL_SECONDS` | `5` |
@@ -128,7 +136,7 @@ sudo runuser -u sma20trailhigh -g ubuntu -- python3 -c \
 sudo systemctl restart tradingai-sma20_high_trail-scanner.service
 ```
 
-This trail scanner is **not locked**. Edit the source, verify it compiles, then restart the unit. Keep it in sync with the corresponding base scanner's entry logic.
+This trail scanner is **not locked**. Edit the source, verify it compiles, then restart the unit. Its entries come from the base scanner's status API, so it stays aligned with the base rule automatically.
 
 ## Data
 
@@ -137,6 +145,7 @@ This trail scanner is **not locked**. Edit the source, verify it compiles, then 
 | `sma20_high_trail_trades` | closed paper trades |
 | `sma20_high_trail_open_positions` | open CE/PE positions, including `hwm` and `stop` |
 | `sma20_high_trail_scan_state` | key/value runtime state |
+| `sma20_high_trail_consumed_base_trades` | base trade ids already consumed (prevents re-entry of the same base trade) |
 
 `exit_reason` is `SAME_CANDLE_EXIT` or `TRAIL_STOP_EXIT`. `pnl_points = exit_price - entry_price`.
 

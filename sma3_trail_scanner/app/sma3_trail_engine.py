@@ -2,7 +2,9 @@
 """Pure SMA3 Trail strategy engine for ATM NIFTY CE and PE options.
 
 BUY-ONLY rules (identical for CE and PE):
-  Entry: inherited from base sma3 scanner
+  Entry: consumed from the base sma3 scanner (same contract, price
+         and entry candle); this module's evaluate_option is kept only for
+         diagnostics/tests.
   Exit: TRAILING STOP -- stop = peak - 5.0 pts, activates at +5.0 pts
         (breakeven at activation), ratchets up only.
         Exit at the stop ONLY if the stop is above entry price (profitable lock).
@@ -25,7 +27,7 @@ CANDLE_MINUTES = 5
 TRAIL = 5.0
 ACTIVATE = 5.0
 STRATEGY_ID = "sma3_trail"
-STRATEGY_VERSION = "1.0.0"
+STRATEGY_VERSION = "2.0.0"
 STRATEGY_TYPE = "SMA_BUY_ONLY"
 ENTRY_TYPE = "sma"
 
@@ -88,6 +90,7 @@ class Evaluation:
     ltp: Optional[float] = None
     condition_a: bool = False
     condition_b: bool = False
+    condition_c: bool = False
     qualified: bool = False
     confirmation: bool = False
     breakout: bool = False
@@ -107,6 +110,7 @@ class Evaluation:
             "ltp": self.ltp,
             "condition_a": self.condition_a,
             "condition_b": self.condition_b,
+            "condition_c": self.condition_c,
             "qualified": self.qualified,
             "confirmation": self.confirmation,
             "breakout": self.breakout,
@@ -160,28 +164,32 @@ def evaluate_option(candles, option_type, ltp=None):
     elif entry_type == "sma":
         ev.condition_a = sma is not None and prev["close"] > sma
         ev.condition_b = sma is not None and forming["open"] > sma
-        ev.qualified = ev.condition_a or ev.condition_b
-        ev.confirmation = ltp is not None and sma is not None and ltp > sma
-        ev.signal = bool(ev.qualified and ev.confirmation)
-        if ltp is None:
-            ev.reason = "LTP unavailable"
-        elif ev.signal:
-            ev.reason = "BUY signal: qualified and LTP>SMA"
+        ev.qualified = ev.condition_a and ev.condition_b
+        ev.confirmation = ev.qualified
+        ev.signal = bool(ev.qualified)
+        if not ev.condition_a:
+            ev.reason = "not qualified: prev_close<=SMA"
+        elif not ev.condition_b:
+            ev.reason = "not qualified: current_open<=SMA"
         else:
-            ev.reason = "waiting for signal"
+            ev.reason = "BUY signal: prev_close>SMA and current_open>SMA"
     elif entry_type == "sma_high":
         ev.condition_a = sma is not None and prev["close"] > sma
-        ev.condition_b = sma is not None and forming["open"] > sma
-        ev.qualified = ev.condition_a or ev.condition_b
-        ev.breakout = ltp is not None and ltp > prev["high"]
-        ev.confirmation = bool(ev.breakout)
+        ev.condition_b = ltp is not None and ltp > prev["high"]
+        ev.condition_c = sma is not None and forming["open"] > sma
+        ev.qualified = ev.condition_a and ev.condition_c
+        ev.confirmation = ev.condition_b
         ev.signal = bool(ev.qualified and ev.confirmation)
         if ltp is None:
             ev.reason = "LTP unavailable"
-        elif ev.signal:
-            ev.reason = "BUY signal: qualified and LTP>prev_high"
+        elif not ev.condition_a:
+            ev.reason = f"not qualified: prev_close<=SMA"
+        elif not ev.condition_c:
+            ev.reason = f"not qualified: current_open<=SMA"
+        elif not ev.condition_b:
+            ev.reason = f"prev_close and current_open above SMA; waiting for LTP>prev_high"
         else:
-            ev.reason = "waiting for signal"
+            ev.reason = f"BUY signal: prev_close>SMA and current_open>SMA and LTP>prev_high"
     else:
         ev.reason = f"unknown entry_type: {entry_type}"
 

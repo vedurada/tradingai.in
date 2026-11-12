@@ -13,20 +13,20 @@ running on the TradingAI VM.
 
 | # | Scanner key | Family | Entry logic | Exit logic |
 |---|---|---|---|---|
-| 1 | `sma3` | Base SMA | prev close > SMA3 **or** forming open > SMA3, and LTP > SMA3 | entry-candle close |
-| 2 | `sma9` | Base SMA | prev close > SMA9 **or** forming open > SMA9, and LTP > SMA9 | entry-candle close |
-| 3 | `sma20` | Base SMA | prev close > SMA20 **or** forming open > SMA20, and LTP > SMA20 | entry-candle close |
-| 4 | `sma3_high` | HIGH | prev close > SMA3 **and** LTP > prev candle high **and** LTP > SMA3 | entry-candle close |
-| 5 | `sma9_high` | HIGH | prev close > SMA9 **and** LTP > prev candle high **and** LTP > SMA9 | entry-candle close |
-| 6 | `sma20_high` | HIGH | prev close > SMA20 **and** LTP > prev candle high **and** LTP > SMA20 | entry-candle close |
+| 1 | `sma3` | Base SMA | prev close > SMA3 **and** forming open > SMA3 | entry-candle close |
+| 2 | `sma9` | Base SMA | prev close > SMA9 **and** forming open > SMA9 | entry-candle close |
+| 3 | `sma20` | Base SMA | prev close > SMA20 **and** forming open > SMA20 | entry-candle close |
+| 4 | `sma3_high` | HIGH | prev close > SMA3 **and** forming open > SMA3 **and** LTP > prev candle high | entry-candle close |
+| 5 | `sma9_high` | HIGH | prev close > SMA9 **and** forming open > SMA9 **and** LTP > prev candle high | entry-candle close |
+| 6 | `sma20_high` | HIGH | prev close > SMA20 **and** forming open > SMA20 **and** LTP > prev candle high | entry-candle close |
 | 7 | `no_sma` | NO-SMA | LTP > previous completed candle high | entry-candle close |
-| 8 | `sma3_trail` | Trail | inherits `sma3` | 5-pt trailing stop, else candle close |
-| 9 | `sma9_trail` | Trail | inherits `sma9` | 5-pt trailing stop, else candle close |
-| 10 | `sma20_trail` | Trail | inherits `sma20` | 5-pt trailing stop, else candle close |
-| 11 | `sma3_high_trail` | Trail | inherits `sma3_high` | 5-pt trailing stop, else candle close |
-| 12 | `sma9_high_trail` | Trail | inherits `sma9_high` | 5-pt trailing stop, else candle close |
-| 13 | `sma20_high_trail` | Trail | inherits `sma20_high` | 5-pt trailing stop, else candle close |
-| 14 | `no_sma_trail` | Trail | inherits `no_sma` | 5-pt trailing stop, else candle close |
+| 8 | `sma3_trail` | Trail | consumes base `sma3` position | 5-pt trailing stop, else candle close |
+| 9 | `sma9_trail` | Trail | consumes base `sma9` position | 5-pt trailing stop, else candle close |
+| 10 | `sma20_trail` | Trail | consumes base `sma20` position | 5-pt trailing stop, else candle close |
+| 11 | `sma3_high_trail` | Trail | consumes base `sma3_high` position | 5-pt trailing stop, else candle close |
+| 12 | `sma9_high_trail` | Trail | consumes base `sma9_high` position | 5-pt trailing stop, else candle close |
+| 13 | `sma20_high_trail` | Trail | consumes base `sma20_high` position | 5-pt trailing stop, else candle close |
+| 14 | `no_sma_trail` | Trail | consumes base `no_sma` position | 5-pt trailing stop, else candle close |
 
 Each scanner is a **fully independent stack**: own code directory, own Python
 library directory, own SQLite database, own unprivileged service user, own
@@ -216,20 +216,20 @@ the API at the same instant.
 
 | Key | Strategy id | Strategy type | Ver | SMA | Trail / activate | off | User | systemd unit |
 |---|---|---|---|---|---|---|---|---|
-| `sma3` | `sma3_only` | `SMA3_BUY_ONLY` | 3.0.0 | 3 | — | 0 | `sma3` | `tradingai-sma3-scanner` |
-| `sma9` | `sma9_only` | `SMA9_BUY_ONLY` | 2.0.0 | 9 | — | 0 | `sma9` | `tradingai-sma9-scanner` |
-| `sma20` | `sma20_only` | `SMA20_BUY_ONLY` | 20.0.0 | 20 | — | 0 | `sma20` | `tradingai-sma20-scanner` |
-| `sma3_high` | `sma3_high` | `SMA3_HIGH_BUY_ONLY` | 1.1.0 | 3 | — | 1.2 | `sma3high` | `tradingai-sma3-high-scanner` |
-| `sma9_high` | `sma9_high` | `SMA9_HIGH_BUY_ONLY` | 1.1.0 | 9 | — | 2.4 | `sma9high` | `tradingai-sma9-high-scanner` |
-| `sma20_high` | `sma20_high` | `SMA20_HIGH_BUY_ONLY` | 1.1.0 | 20 | — | 3.6 | `sma20high` | `tradingai-sma20-high-scanner` |
+| `sma3` | `sma3_only` | `SMA3_BUY_ONLY` | 3.1.0 | 3 | — | 0 | `sma3` | `tradingai-sma3-scanner` |
+| `sma9` | `sma9_only` | `SMA9_BUY_ONLY` | 2.1.0 | 9 | — | 0 | `sma9` | `tradingai-sma9-scanner` |
+| `sma20` | `sma20_only` | `SMA20_BUY_ONLY` | 20.1.0 | 20 | — | 0 | `sma20` | `tradingai-sma20-scanner` |
+| `sma3_high` | `sma3_high` | `SMA3_HIGH_BUY_ONLY` | 1.2.0 | 3 | — | 1.2 | `sma3high` | `tradingai-sma3-high-scanner` |
+| `sma9_high` | `sma9_high` | `SMA9_HIGH_BUY_ONLY` | 1.2.0 | 9 | — | 2.4 | `sma9high` | `tradingai-sma9-high-scanner` |
+| `sma20_high` | `sma20_high` | `SMA20_HIGH_BUY_ONLY` | 1.2.0 | 20 | — | 3.6 | `sma20high` | `tradingai-sma20-high-scanner` |
 | `no_sma` | `no_sma` | `NO_SMA_BUY_ONLY` | 1.0.0 | — | — | 0 | `nosma` | `tradingai-no-sma-scanner` |
-| `sma3_trail` | `sma3_trail` | `SMA_BUY_ONLY` | 1.0.0 | 3 | 5.0 / 5.0 | 0.6 | `sma3trail` | `tradingai-sma3_trail-scanner` |
-| `sma9_trail` | `sma9_trail` | `SMA_BUY_ONLY` | 1.0.0 | 9 | 5.0 / 5.0 | 1.2 | `sma9trail` | `tradingai-sma9_trail-scanner` |
-| `sma20_trail` | `sma20_trail` | `SMA_BUY_ONLY` | 1.0.0 | 20 | 5.0 / 5.0 | 1.8 | `sma20trail` | `tradingai-sma20_trail-scanner` |
-| `sma3_high_trail` | `sma3_high_trail` | `SMA_HIGH_BUY_ONLY` | 1.1.0 | 3 | 5.0 / 5.0 | 2.4 | `sma3trailhigh` | `tradingai-sma3_high_trail-scanner` |
-| `sma9_high_trail` | `sma9_high_trail` | `SMA_HIGH_BUY_ONLY` | 1.1.0 | 9 | 5.0 / 5.0 | 3.0 | `sma9trailhigh` | `tradingai-sma9_high_trail-scanner` |
-| `sma20_high_trail` | `sma20_high_trail` | `SMA_HIGH_BUY_ONLY` | 1.1.0 | 20 | 5.0 / 5.0 | 3.6 | `sma20trailhigh` | `tradingai-sma20_high_trail-scanner` |
-| `no_sma_trail` | `no_sma_trail` | `PREV_HIGH_BUY_ONLY` | 1.0.0 | — | 5.0 / 5.0 | 4.2 | `nosmatrail` | `tradingai-no_sma_trail-scanner` |
+| `sma3_trail` | `sma3_trail` | `SMA_BUY_ONLY` | 2.0.0 | 3 | 5.0 / 5.0 | 0.6 | `sma3trail` | `tradingai-sma3_trail-scanner` |
+| `sma9_trail` | `sma9_trail` | `SMA_BUY_ONLY` | 2.0.0 | 9 | 5.0 / 5.0 | 1.2 | `sma9trail` | `tradingai-sma9_trail-scanner` |
+| `sma20_trail` | `sma20_trail` | `SMA_BUY_ONLY` | 2.0.0 | 20 | 5.0 / 5.0 | 1.8 | `sma20trail` | `tradingai-sma20_trail-scanner` |
+| `sma3_high_trail` | `sma3_high_trail` | `SMA_HIGH_BUY_ONLY` | 2.0.0 | 3 | 5.0 / 5.0 | 2.4 | `sma3trailhigh` | `tradingai-sma3_high_trail-scanner` |
+| `sma9_high_trail` | `sma9_high_trail` | `SMA_HIGH_BUY_ONLY` | 2.0.0 | 9 | 5.0 / 5.0 | 3.0 | `sma9trailhigh` | `tradingai-sma9_high_trail-scanner` |
+| `sma20_high_trail` | `sma20_high_trail` | `SMA_HIGH_BUY_ONLY` | 2.0.0 | 20 | 5.0 / 5.0 | 3.6 | `sma20trailhigh` | `tradingai-sma20_high_trail-scanner` |
+| `no_sma_trail` | `no_sma_trail` | `PREV_HIGH_BUY_ONLY` | 2.0.0 | — | 5.0 / 5.0 | 4.2 | `nosmatrail` | `tradingai-no_sma_trail-scanner` |
 
 DB path is always `/opt/tradingai/database/<key>.db`.
 API namespace is always `/api/<slug>/` (slug = key with `_` → `-`).
@@ -246,29 +246,32 @@ the last *N* completed closes.
 ### 5.1 Base SMA (`sma3`, `sma9`, `sma20`)
 
 ```
-qualified    = (prev.close > SMA_N) OR (forming.open > SMA_N)
-confirmation = LTP > SMA_N
-signal       = qualified AND confirmation
-entry        = paper BUY at round(LTP, 2)
-exit         = at the close of the entry candle (SAME_CANDLE_EXIT)
+condition_a = prev.close > SMA_N
+condition_b = forming.open > SMA_N
+signal      = condition_a AND condition_b
+entry       = paper BUY at round(LTP, 2)
+exit        = at the close of the entry candle (SAME_CANDLE_EXIT)
 ```
 
-Entry may fire on any 5-second poll while the signal holds. No stop-loss.
+Both conditions must be true; there is **no separate LTP > SMA confirmation
+gate**. Entry may fire on any 5-second poll while the signal holds. No
+stop-loss.
 
 ### 5.2 HIGH (`sma3_high`, `sma9_high`, `sma20_high`)
 
 ```
-condition_a  = prev.close > SMA_N
-condition_b  = LTP > prev.high
-confirmation = LTP > SMA_N
-signal       = condition_a AND condition_b AND confirmation
-entry        = paper BUY at round(LTP, 2)
-exit         = at the close of the entry candle
+condition_a = prev.close > SMA_N
+condition_c = forming.open > SMA_N
+condition_b = LTP > prev.high
+signal      = condition_a AND condition_c AND condition_b
+entry       = paper BUY at round(LTP, 2)
+exit        = at the close of the entry candle
 ```
 
 This is the strict variant: the previous completed candle must close above
-the SMA, the live premium must break the previous candle high, and it must
-also be above the SMA. The forming candle's open is not used. No stop-loss.
+the SMA, the forming candle must open above the SMA, and the live premium
+must break the previous candle high. There is **no separate LTP > SMA
+confirmation gate**. No stop-loss.
 
 ### 5.3 NO-SMA (`no_sma`)
 
@@ -282,8 +285,22 @@ No moving average anywhere. No stop-loss.
 
 ### 5.4 Trail (`*_trail`)
 
-Entry is inherited unchanged from the corresponding base scanner
-(`sma` / `sma_high` / `prev_high`).
+Entry signals are **consumed from the corresponding base scanner**
+(`sma3`/`sma9`/`sma20`, `sma3_high`/`sma9_high`/`sma20_high`, `no_sma`).
+
+Each tick the trail scanner calls the base scanner's local status API:
+
+```
+GET https://127.0.0.1/api/<base-slug>/scanner-status
+Host: tradingai.in
+```
+
+When the base has a new open position, the trail scanner copies that trade
+exactly once — same option type, strike, expiry, token, entry price, entry
+timestamp and entry candle — and records the base `trade_id` in
+`<key>_consumed_base_trades`. A trail-stop exit therefore never re-enters the
+same base trade while the base scanner is still holding it to candle close.
+The trail scanner owns only the exit.
 
 Exit is evaluated before the candle-close exit, on every poll:
 
@@ -311,13 +328,15 @@ else:
 
 ## 6. Data model (SQLite)
 
-Each database has three tables, prefixed with the scanner key:
+Each database has three core tables, prefixed with the scanner key.
+Trail databases have a fourth table:
 
 | Table | Purpose |
 |---|---|
 | `<key>_trades` | closed trades (one row per paper round trip) |
 | `<key>_open_positions` | live open position(s), keyed by option type (CE/PE) |
 | `<key>_scan_state` | key/value runtime state |
+| `<key>_consumed_base_trades` | (trail only) base trade ids already consumed |
 
 Common `trades` columns: `trade_id`, `strategy_id`, `instrument`,
 `trade_date`, `option_type`, `strike`, `expiry`, `signal_timestamp`,
@@ -331,9 +350,9 @@ Family-specific columns:
 | Family | Extra columns |
 |---|---|
 | Base SMA | `sma{n}_value` (`sma3_value` / `sma9_value` / `sma20_value`), `prev_close`, `condition_a`, `condition_b` |
-| HIGH | `sma_value`, `prev_high`, `condition_a`, `condition_b` |
+| HIGH | `sma_value`, `prev_high`, `condition_a`, `condition_b`, `condition_c` |
 | NO-SMA | `prev_high`, `breakout` |
-| Trail | `prev_high`, `breakout`, and `hwm`, `stop` in `open_positions` |
+| Trail | `prev_high`, `breakout`, and `hwm`, `stop` in `open_positions`; base trade id in `consumed_base_trades` |
 
 `exit_reason` is `SAME_CANDLE_EXIT` or `TRAIL_STOP_EXIT`.
 `pnl_points = exit_price - entry_price` (BUY-only, one lot notional is not
@@ -501,8 +520,10 @@ edit and restart normally.
   tick** — one spot-only refresh for ATM selection, plus one batched
   spot+CE+PE quote. Offset 0.
 - Base HIGH scanners: same **2-call** pattern, offsets 1.2 / 2.4 / 3.6 s.
-- Trail scanners: **1 batched spot+CE+PE quote per tick** (extra calls only on
-  a failed batch or a newly missing contract), offsets 0.6–4.2 s.
+- Trail scanners: **1 local base-status HTTP call + 1 batched spot+CE+PE quote
+  per tick** (extra quote calls only on a failed batch or a newly missing
+  contract), offsets 0.6–4.2 s. The base-status call is local and does not use
+  Kite quota.
 - Historical candles are fetched only when a new 5-minute candle appears (or
   at exit), never on every poll.
 - Kite limits: quotes ≈1 req/s, historical ≈3 req/s per API key.

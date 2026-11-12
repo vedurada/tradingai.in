@@ -75,6 +75,12 @@ def init_db():
             value TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS sma20_high_trail_consumed_base_trades (
+            base_trade_id TEXT PRIMARY KEY,
+            option_type TEXT NOT NULL,
+            consumed_at TEXT NOT NULL
+        );
         """
     )
     conn.commit()

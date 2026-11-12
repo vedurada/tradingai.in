@@ -10,8 +10,8 @@
 | Family | HIGH breakout scanner |
 | Strategy id | `sma3_high` |
 | Strategy type | `SMA3_HIGH_BUY_ONLY` |
-| Strategy version | `1.1.0` |
-| Package VERSION file | `1.1.0-2026-11-12` |
+| Strategy version | `1.2.0` |
+| Package VERSION file | `1.2.0-2026-11-12` |
 | Service unit | `tradingai-sma3-high-scanner.service` |
 | Service user / group | `sma3high` / `ubuntu` |
 | Database | `/opt/tradingai/database/sma3_high.db` |
@@ -26,14 +26,15 @@ candles except the still-forming last one; `prev` = the last completed candle;
 `SMA3` = mean of the last 3 completed closes.
 
 ```
-condition_a  = prev.close > SMA3
-condition_b  = LTP > prev.high
-confirmation = LTP > SMA3
-signal       = condition_a AND condition_b AND confirmation
+condition_a = prev.close > SMA3
+condition_c = forming.open > SMA3
+condition_b = LTP > prev.high
+signal      = condition_a AND condition_c AND condition_b
 ```
 
-The entry may fire on any 5-second poll while all three conditions hold. The
-paper fill is `round(LTP, 2)`.
+All three conditions must be true; there is **no separate LTP > SMA
+confirmation gate**. The entry may fire on any 5-second poll while the signal
+holds. The paper fill is `round(LTP, 2)`.
 
 ## Exit rule
 
@@ -46,7 +47,7 @@ There is no stop-loss and no carry-forward.
 |---|---|
 | `STRATEGY_ID` | `sma3_high` |
 | `STRATEGY_TYPE` | `SMA3_HIGH_BUY_ONLY` |
-| `STRATEGY_VERSION` | `1.1.0` |
+| `STRATEGY_VERSION` | `1.2.0` |
 | `SMA_PERIOD` | `3` |
 | `CANDLE_MINUTES` | `5` |
 | `POLL_SECONDS` | `5` |

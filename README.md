@@ -7,6 +7,10 @@ for ATM NIFTY CE/PE options. Each scanner is a complete, self-contained copy
 with its own code, database, service user, systemd unit, API namespace, and
 dashboard.
 
+Entries are **consumed from the corresponding base scanner's live open
+position** (same contract, price and entry candle) through the local base
+status API. A trail scanner owns only the exit.
+
 ## Trail Exit Rule (all scanners)
 
 - Stop is **inactive** until the option trades **+5 points** above entry
@@ -20,13 +24,13 @@ dashboard.
 
 | Branch | Scanner | Entry Rule | User | Database | API Namespace | Dashboard |
 |--------|---------|-----------|------|----------|---------------|-----------|
-| `sma3-trail` | SMA3 Trail | SMA3 qualified + LTP > SMA3 | sma3trail | sma3_trail.db | /api/sma3-trail/ | /live/sma3-trail/ |
-| `sma9-trail` | SMA9 Trail | SMA9 qualified + LTP > SMA9 | sma9trail | sma9_trail.db | /api/sma9-trail/ | /live/sma9-trail/ |
-| `sma20-trail` | SMA20 Trail | SMA20 qualified + LTP > SMA20 | sma20trail | sma20_trail.db | /api/sma20-trail/ | /live/sma20-trail/ |
-| `sma3-high-trail` | SMA3 HIGH Trail | SMA3 + LTP > prev candle HIGH | sma3trailhigh | sma3_high_trail.db | /api/sma3-high-trail/ | /live/sma3-high-trail/ |
-| `sma9-high-trail` | SMA9 HIGH Trail | SMA9 + LTP > prev candle HIGH | sma9trailhigh | sma9_high_trail.db | /api/sma9-high-trail/ | /live/sma9-high-trail/ |
-| `sma20-high-trail` | SMA20 HIGH Trail | SMA20 + LTP > prev candle HIGH | sma20trailhigh | sma20_high_trail.db | /api/sma20-high-trail/ | /live/sma20-high-trail/ |
-| `no-sma-trail` | NO-SMA Trail | LTP > prev candle HIGH only | nosmatrail | no_sma_trail.db | /api/no-sma-trail/ | /live/no-sma-trail/ |
+| `sma3-trail` | SMA3 Trail | consumes base `sma3` position | sma3trail | sma3_trail.db | /api/sma3-trail/ | /live/sma3-trail/ |
+| `sma9-trail` | SMA9 Trail | consumes base `sma9` position | sma9trail | sma9_trail.db | /api/sma9-trail/ | /live/sma9-trail/ |
+| `sma20-trail` | SMA20 Trail | consumes base `sma20` position | sma20trail | sma20_trail.db | /api/sma20-trail/ | /live/sma20-trail/ |
+| `sma3-high-trail` | SMA3 HIGH Trail | consumes base `sma3_high` position | sma3trailhigh | sma3_high_trail.db | /api/sma3-high-trail/ | /live/sma3-high-trail/ |
+| `sma9-high-trail` | SMA9 HIGH Trail | consumes base `sma9_high` position | sma9trailhigh | sma9_high_trail.db | /api/sma9-high-trail/ | /live/sma9-high-trail/ |
+| `sma20-high-trail` | SMA20 HIGH Trail | consumes base `sma20_high` position | sma20trailhigh | sma20_high_trail.db | /api/sma20-high-trail/ | /live/sma20-high-trail/ |
+| `no-sma-trail` | NO-SMA Trail | consumes base `no_sma` position | nosmatrail | no_sma_trail.db | /api/no-sma-trail/ | /live/no-sma-trail/ |
 
 ## Shared Files
 

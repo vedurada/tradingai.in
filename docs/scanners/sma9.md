@@ -10,8 +10,8 @@
 | Family | Base SMA scanner |
 | Strategy id | `sma9_only` |
 | Strategy type | `SMA9_BUY_ONLY` |
-| Strategy version | `2.0.0` |
-| Package VERSION file | `2.0.0-locked-2026-11-06` |
+| Strategy version | `2.1.0` |
+| Package VERSION file | `2.1.0-2026-11-12` |
 | Service unit | `tradingai-sma9-scanner.service` |
 | Service user / group | `sma9` / `ubuntu` |
 | Database | `/opt/tradingai/database/sma9.db` |
@@ -26,13 +26,14 @@ candles except the still-forming last one; `prev` = the last completed candle;
 `SMA9` = mean of the last 9 completed closes.
 
 ```
-qualified    = (prev.close > SMA9) OR (forming.open > SMA9)
-confirmation = LTP > SMA9
-signal       = qualified AND confirmation
+condition_a = prev.close > SMA9
+condition_b = forming.open > SMA9
+signal      = condition_a AND condition_b
 ```
 
-The entry may fire on any 5-second poll while the signal holds. The paper fill
-is `round(LTP, 2)`.
+Both conditions must be true; there is **no separate LTP > SMA confirmation
+gate**. The entry may fire on any 5-second poll while the signal holds. The
+paper fill is `round(LTP, 2)`.
 
 ## Exit rule
 
@@ -45,7 +46,7 @@ There is no stop-loss and no carry-forward.
 |---|---|
 | `STRATEGY_ID` | `sma9_only` |
 | `STRATEGY_TYPE` | `SMA9_BUY_ONLY` |
-| `STRATEGY_VERSION` | `2.0.0` |
+| `STRATEGY_VERSION` | `2.1.0` |
 | `SMA_PERIOD` | `9` |
 | `CANDLE_MINUTES` | `5` |
 | `POLL_SECONDS` | `5` |

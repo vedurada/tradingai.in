@@ -10,8 +10,8 @@
 | Family | Trail variant of the NO-SMA scanner |
 | Strategy id | `no_sma_trail` |
 | Strategy type | `PREV_HIGH_BUY_ONLY` |
-| Strategy version | `1.0.0` |
-| Package VERSION file | `1.0.0` |
+| Strategy version | `2.0.0` |
+| Package VERSION file | `2.0.0` |
 | Service unit | `tradingai-no_sma_trail-scanner.service` |
 | Service user / group | `nosmatrail` / `ubuntu` |
 | Database | `/opt/tradingai/database/no_sma_trail.db` |
@@ -21,7 +21,14 @@
 
 ## Entry rule
 
-Entry is inherited unchanged from the base scanner `no_sma`.
+Entry signals are **consumed from the base scanner `no_sma`**. The trail scanner polls the base scanner's local status API every tick and, when the base has a new open position, copies that trade exactly once: same option type, strike, expiry, token, entry price, entry timestamp and entry candle.
+
+```
+GET https://127.0.0.1/api/no-sma/scanner-status
+Host: tradingai.in
+```
+
+A consumed base trade id is recorded in `no_sma_trail_consumed_base_trades`, so a trail-stop exit never re-enters the same base trade while the base scanner is still holding it to candle close. The base scanner's own entry rule (shown below) is the single source of truth:
 
 Candles are 5-minute **option-premium** candles. `prev` = the last
 completed candle. No moving average is used anywhere.
@@ -33,7 +40,7 @@ signal = LTP > prev.high
 The entry may fire on any 5-second poll while the premium is above the previous
 completed candle high. The paper fill is `round(LTP, 2)`.
 
-The entry logic is identical to `no_sma`; only the exit differs.
+Only the exit differs from the base scanner.
 
 ## Exit rule
 
@@ -65,7 +72,7 @@ else:
 |---|---|
 | `STRATEGY_ID` | `no_sma_trail` |
 | `STRATEGY_TYPE` | `PREV_HIGH_BUY_ONLY` |
-| `STRATEGY_VERSION` | `1.0.0` |
+| `STRATEGY_VERSION` | `2.0.0` |
 | `SMA_PERIOD` | none (NO-SMA) |
 | `CANDLE_MINUTES` | `5` |
 | `POLL_SECONDS` | `5` |
@@ -124,7 +131,7 @@ sudo runuser -u nosmatrail -g ubuntu -- python3 -c \
 sudo systemctl restart tradingai-no_sma_trail-scanner.service
 ```
 
-This trail scanner is **not locked**. Edit the source, verify it compiles, then restart the unit. Keep it in sync with the corresponding base scanner's entry logic.
+This trail scanner is **not locked**. Edit the source, verify it compiles, then restart the unit. Its entries come from the base scanner's status API, so it stays aligned with the base rule automatically.
 
 ## Data
 
@@ -133,6 +140,7 @@ This trail scanner is **not locked**. Edit the source, verify it compiles, then 
 | `no_sma_trail_trades` | closed paper trades |
 | `no_sma_trail_open_positions` | open CE/PE positions, including `hwm` and `stop` |
 | `no_sma_trail_scan_state` | key/value runtime state |
+| `no_sma_trail_consumed_base_trades` | base trade ids already consumed (prevents re-entry of the same base trade) |
 
 `exit_reason` is `SAME_CANDLE_EXIT` or `TRAIL_STOP_EXIT`. `pnl_points = exit_price - entry_price`.
 

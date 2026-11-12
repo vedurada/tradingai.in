@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """SMA9 HIGH Trail live paper scanner - BUY ONLY with trailing-stop exit.
 
-Entry: inherited from base sma9_high scanner.
+Entry: consumed from the base sma9_high scanner's live open position.
+       The base scanner owns entry selection; this scanner copies the base
+       trade (contract, price, timestamp, entry candle) exactly once and
+       only owns the exit.
 Exit: TRAILING STOP -- stop = peak - 5.0 pts, activates at +5.0 pts
       (breakeven at activation), ratchets up only.  Exit at the stop ONLY if
       the stop is above entry price (profitable lock).  Breakeven or loss
@@ -20,10 +23,13 @@ from __future__ import annotations
 import json
 import logging
 import os
+import random
 import sqlite3
+import ssl
 import sys
 import time
 import traceback
+import urllib.request
 from datetime import date, datetime, time as dtime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -44,6 +50,7 @@ from app.sma9_high_trail_engine import (  # noqa: E402
     ACTIVATE,
     candle_end,
     evaluate_option,
+    make_trade_id,
     normalize_candles,
 )
 
@@ -51,8 +58,20 @@ IST = ZoneInfo("Asia/Kolkata")
 DB_PATH = os.environ.get("SMA9_HIGH_TRAIL_DB_PATH", os.path.join(BASE, "database", "sma9_high_trail.db"))
 LOG_PATH = os.path.join(BASE, "logs", "live_sma9_high_trail_scanner.log")
 
+# Entry signals come from the base scanner's own live-status API.  Reading the
+# base SQLite file directly is not possible for the trail service users because
+# the WAL mode database rejects read-only opens from a different user.
+BASE_STATUS_URL = "https://127.0.0.1/api/sma9-high/scanner-status"
+BASE_STATUS_HOST = "tradingai.in"
+BASE_STATUS_TIMEOUT = 3.0
+
 MARKET_OPEN = dtime(9, 15)
 MARKET_CLOSE = dtime(15, 30)
+# New paper entries are allowed only inside this window (exits are not
+# affected).  The 09:15 candle is never entered and the last entry candle is
+# 15:10, so nothing is opened at or after 15:15.
+ENTRY_START = dtime(9, 20)
+ENTRY_END = dtime(15, 15)
 MUHURAT_SESSIONS = {
     "2026-11-08": (dtime(14, 0), dtime(17, 0)),
 }
@@ -67,6 +86,23 @@ def session_close_time(dt):
 
 
 POLL_SECONDS = 5
+# Per-scanner phase offset (seconds) inside the 5s tick window.  Without this
+# every scanner re-aligns to the same wall-clock boundary and they all hit the
+# Kite historical/quote endpoints at the same instant, which triggers
+# "Too many requests".  Each variant gets a distinct offset from VARIANTS.
+POLL_OFFSET_SECONDS = 3.0
+# Historical lookback: 1 day is enough on normal days (previous session is
+# included).  If fewer than CANDLE_MIN_ROWS rows come back (e.g. Monday, when
+# 1 day back is Sunday) widen once to the fallback window so SMA20 still has
+# enough completed candles.  This keeps payloads small without changing logic.
+CANDLE_LOOKBACK_DAYS = 1
+CANDLE_LOOKBACK_DAYS_FALLBACK = 3
+CANDLE_MIN_ROWS = 25
+# Boundary re-fetch backoff.  A small random jitter de-synchronises the
+# scanners that are waiting for the exchange to publish the new candle.
+CANDLE_BACKOFF_BASE = 8
+CANDLE_BACKOFF_JITTER = 4
+CANDLE_BACKOFF_MAX = 90
 INSTRUMENT = "NIFTY"
 TIMEFRAME = "5m"
 SCANNER_NAME = "SMA9 HIGH Trail - ATM Option Strike + Trail Exit (BUY ONLY)"
@@ -103,15 +139,34 @@ def market_is_open(dt):
     return session_open_time(dt) <= dt.time() < session_close_time(dt)
 
 
+def entry_window_is_open(dt):
+    """True only inside the 09:20:00-15:14:59 entry window.
+
+    The session is 09:15-15:30, but new paper entries are allowed only from
+    09:20 (so the 09:15 candle is never entered) and are blocked at 15:15
+    (last entry candle is 15:10).  Exits are not affected.
+    """
+    if not market_is_open(dt):
+        return False
+    return ENTRY_START <= dt.time() < ENTRY_END
+
+
 def market_close_dt(dt):
     return datetime.combine(dt.date(), session_close_time(dt), tzinfo=IST)
 
 
 def sleep_to_next_tick():
+    """Sleep until the next 5s tick for THIS scanner.
+
+    Ticks are aligned to ``POLL_OFFSET_SECONDS + k*POLL_SECONDS`` so the 7
+    trail scanners fire at different instants instead of all together.
+    """
     now = now_ist()
-    next_second = ((now.second // POLL_SECONDS) + 1) * POLL_SECONDS
-    target = now.replace(microsecond=0) + timedelta(seconds=next_second - now.second)
-    time.sleep(max(0.2, (target - now_ist()).total_seconds()))
+    epoch = now.timestamp()
+    target = (
+        (int(epoch - POLL_OFFSET_SECONDS) // POLL_SECONDS) + 1
+    ) * POLL_SECONDS + POLL_OFFSET_SECONDS
+    time.sleep(max(0.2, target - epoch))
 
 
 # ---------------------------------------------------------------------------
@@ -199,6 +254,12 @@ def init_db():
             value TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS sma9_high_trail_consumed_base_trades (
+            base_trade_id TEXT PRIMARY KEY,
+            option_type TEXT NOT NULL,
+            consumed_at TEXT NOT NULL
+        );
         """
     )
     conn.commit()
@@ -285,6 +346,44 @@ def load_open_positions():
     return result
 
 
+def base_trade_consumed(base_trade_id):
+    conn = db_conn()
+    try:
+        row = conn.execute(
+            "SELECT 1 FROM sma9_high_trail_consumed_base_trades WHERE base_trade_id = ?",
+            (base_trade_id,),
+        ).fetchone()
+        return row is not None
+    finally:
+        conn.close()
+
+
+def mark_base_trade_consumed(base_trade_id, option_type):
+    conn = db_conn()
+    try:
+        conn.execute(
+            "INSERT OR IGNORE INTO sma9_high_trail_consumed_base_trades "
+            "(base_trade_id, option_type, consumed_at) VALUES (?,?,?)",
+            (base_trade_id, option_type, now_ist().isoformat()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def prune_consumed_base_trades(days=3):
+    cutoff = (now_ist() - timedelta(days=days)).isoformat()
+    conn = db_conn()
+    try:
+        conn.execute(
+            "DELETE FROM sma9_high_trail_consumed_base_trades WHERE consumed_at < ?",
+            (cutoff,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def save_scan_state(state):
     conn = db_conn()
     try:
@@ -315,6 +414,30 @@ def today_stats(today):
         "wins": row["wins"],
         "losses": row["losses"],
     }
+
+
+# ---------------------------------------------------------------------------
+# Base-scanner signal feed
+# ---------------------------------------------------------------------------
+class BaseSignalFeed:
+    """Read the base scanner's live status through the local nginx API."""
+
+    def __init__(self):
+        self._ssl = ssl.create_default_context()
+        self._ssl.check_hostname = False
+        self._ssl.verify_mode = ssl.CERT_NONE
+        self.last_error = None
+
+    def fetch(self):
+        req = urllib.request.Request(
+            BASE_STATUS_URL, headers={"Host": BASE_STATUS_HOST})
+        with urllib.request.urlopen(
+                req, context=self._ssl, timeout=BASE_STATUS_TIMEOUT) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        if not data.get("success"):
+            raise RuntimeError(data.get("error") or "base status success=False")
+        self.last_error = None
+        return data
 
 
 # ---------------------------------------------------------------------------
@@ -383,17 +506,24 @@ class KiteFeed:
 
     def _fetch_candles(self, token):
         now = now_ist()
-        start = now - timedelta(days=3)
-        start = start.replace(hour=9, minute=15, second=0, microsecond=0)
-        raw = self.kite.historical_data(token, start, now, "5minute")
-        rows = normalize_candles([
-            {
-                "start": r["date"].astimezone(IST) if hasattr(r["date"], "astimezone") else r["date"],
-                "open": r["open"], "high": r["high"], "low": r["low"],
-                "close": r["close"], "volume": r.get("volume", 0),
-            }
-            for r in raw
-        ])
+
+        def _fetch(days):
+            start = now - timedelta(days=days)
+            start = start.replace(hour=9, minute=15, second=0, microsecond=0)
+            raw = self.kite.historical_data(token, start, now, "5minute")
+            return normalize_candles([
+                {
+                    "start": r["date"].astimezone(IST) if hasattr(r["date"], "astimezone") else r["date"],
+                    "open": r["open"], "high": r["high"], "low": r["low"],
+                    "close": r["close"], "volume": r.get("volume", 0),
+                }
+                for r in raw
+            ])
+
+        rows = _fetch(CANDLE_LOOKBACK_DAYS)
+        if len(rows) < CANDLE_MIN_ROWS:
+            # Weekend/holiday: widen once so SMA20 still has enough history.
+            rows = _fetch(CANDLE_LOOKBACK_DAYS_FALLBACK)
         last_start = rows[-1]["start"] if rows else None
         self._candles[token] = (rows, now, last_start)
         return rows
@@ -405,9 +535,10 @@ class KiteFeed:
             rows, fetched_at, last_start = cached
             age = (now - fetched_at).total_seconds()
             current_start = floor_5m(now)
-            if not force and age < 8:
+            if not force and age < CANDLE_BACKOFF_BASE:
                 return rows
-            if not force and last_start == current_start and age < 90:
+            if (not force and last_start == current_start
+                    and age < CANDLE_BACKOFF_MAX + random.uniform(0, CANDLE_BACKOFF_JITTER)):
                 return rows
         return self._fetch_candles(token)
 
@@ -434,6 +565,9 @@ class KiteFeed:
 class TrailLiveScanner:
     def __init__(self, feed):
         self.feed = feed
+        self.base_feed = BaseSignalFeed()
+        self.base_status = {}
+        self.base_ok = False
         self.states = {"CE": OptionStateMachine("CE"), "PE": OptionStateMachine("PE")}
         self.started_at = now_ist().isoformat()
         self.last_scan_at = None
@@ -476,6 +610,94 @@ class TrailLiveScanner:
                 logger.info("Recovered %s position closed at %.2f pnl=%.2f",
                             opt, close_px, trade["pnl_points"])
 
+    def _base_contract(self, opt):
+        base = (self.base_status or {}).get("options", {}).get(opt) or {}
+        token = base.get("token")
+        symbol = base.get("tradingsymbol")
+        if token is None or not symbol:
+            return None
+        return {
+            "tradingsymbol": symbol,
+            "instrument_token": int(token),
+            "strike": base.get("strike"),
+            "expiry": base.get("expiry"),
+        }
+
+    def _resolve_contract(self, opt):
+        pos = self.states[opt].position
+        if pos is not None and pos.token:
+            return {"tradingsymbol": pos.tradingsymbol,
+                    "instrument_token": pos.token,
+                    "strike": pos.strike, "expiry": pos.expiry}
+        return self._base_contract(opt) or self.contracts.get(opt)
+
+    def adopt_base_positions(self, now):
+        """Copy any new open base position into this trail scanner.
+
+        The base trade id is recorded in ``consumed_base_trades`` so a trail
+        stop exit never re-enters the same base trade while the base scanner
+        is still holding it until candle close.
+        """
+        adopted = []
+        options = (self.base_status or {}).get("options", {})
+        for opt in ("CE", "PE"):
+            state = self.states[opt]
+            if state.position is not None:
+                continue
+            base_opt = options.get(opt) or {}
+            base_pos = base_opt.get("position")
+            if not base_pos:
+                continue
+            base_trade_id = base_pos.get("trade_id")
+            if not base_trade_id or base_trade_consumed(base_trade_id):
+                continue
+            try:
+                entry_ts = datetime.fromisoformat(base_pos["entry_timestamp"])
+                candle_start = datetime.fromisoformat(base_pos["entry_candle_start"])
+                candle_end_dt = datetime.fromisoformat(base_pos["entry_candle_end"])
+                entry_price = float(base_pos["entry_price"])
+                strike = float(base_pos["strike"])
+                expiry = str(base_pos["expiry"])
+                token = int(base_pos["token"])
+                tradingsymbol = str(base_pos["tradingsymbol"])
+            except Exception as exc:
+                self.last_error = f"base position parse error ({opt}): {exc}"
+                logger.error(self.last_error)
+                continue
+            if candle_start in state.entered_candles:
+                mark_base_trade_consumed(base_trade_id, opt)
+                continue
+            if candle_end_dt.date() != now.date():
+                # Never adopt a stale position from an earlier session.
+                mark_base_trade_consumed(base_trade_id, opt)
+                continue
+            pos = Position(
+                option_type=opt,
+                trade_id=make_trade_id("NIFTY", strike, opt, candle_start),
+                strike=strike,
+                expiry=expiry,
+                token=token,
+                tradingsymbol=tradingsymbol,
+                entry_timestamp=entry_ts,
+                entry_candle_start=candle_start,
+                entry_candle_end=candle_end_dt,
+                entry_price=entry_price,
+                prev_high=float(base_pos.get("prev_high") or 0.0),
+                current_open=float(base_pos.get("current_open") or 0.0),
+                breakout=bool(base_pos.get("breakout")),
+                ltp_at_entry=float(base_pos.get("ltp_at_entry") or entry_price),
+                hwm=entry_price,
+                stop=None,
+            )
+            state.restore(pos)
+            save_open_position(pos)
+            mark_base_trade_consumed(base_trade_id, opt)
+            adopted.append((opt, base_trade_id))
+            logger.info(
+                "ADOPT base %s trade=%s entry=%.2f candle=%s",
+                opt, base_trade_id, entry_price, candle_start.isoformat())
+        return adopted
+
     def refresh_contracts(self, spot, force=False):
         atm = float(round(spot / 50) * 50)
         if (not force and self.atm_strike == atm and self.expiry is not None
@@ -501,42 +723,76 @@ class TrailLiveScanner:
                 pass
         self.last_scan_at = now.isoformat()
         errors = []
-        allow_entries = market_is_open(now)
-
-        try:
-            nifty = self.feed.quote(["NSE:NIFTY 50"])
-            self.spot = float(nifty["NSE:NIFTY 50"]["last_price"])
-            self.refresh_contracts(self.spot, force=self.atm_strike is None)
-        except Exception as exc:
-            self.last_error = f"spot/contract error: {exc}"
-            logger.error(self.last_error)
-            return self._status(now, {}, errors=[self.last_error])
+        allow_entries = entry_window_is_open(now)
 
         current_candle = floor_5m(now)
         self.last_candle_start = current_candle
 
+        # --- base scanner status: the single source of entry signals -----
+        self.base_ok = False
+        try:
+            self.base_status = self.base_feed.fetch()
+            self.base_ok = True
+        except Exception as exc:
+            self.base_feed.last_error = str(exc)
+            errors.append(f"base status error: {exc}")
+            logger.error(errors[-1])
+
+        adopted = []
+        if allow_entries and self.base_ok:
+            try:
+                adopted = self.adopt_base_positions(now)
+            except Exception as exc:
+                errors.append(f"base adopt error: {exc}")
+                logger.error(errors[-1])
+
+        # Build ONE batch: NIFTY spot + both option legs when already known.
         symbols = ["NSE:NIFTY 50"]
         symbol_for = {}
         for opt in ("CE", "PE"):
-            pos = self.states[opt].position
-            contract = None
-            if pos is not None and pos.token:
-                contract = {"tradingsymbol": pos.tradingsymbol,
-                            "instrument_token": pos.token,
-                            "strike": pos.strike, "expiry": pos.expiry}
-            else:
-                contract = self.contracts.get(opt)
+            contract = self._resolve_contract(opt)
             if contract:
                 sym = f"NFO:{contract['tradingsymbol']}"
                 symbols.append(sym)
                 symbol_for[opt] = (sym, contract)
 
+        quotes = {}
         try:
-            quotes = self.feed.quote(symbols) if len(symbols) > 1 else {}
+            quotes = self.feed.quote(symbols)
+            self.spot = float(quotes["NSE:NIFTY 50"]["last_price"])
         except Exception as exc:
-            quotes = {}
-            errors.append(f"option quote error: {exc}")
-            logger.error(errors[-1])
+            # Batched call failed; retry spot alone so the scanner keeps going.
+            try:
+                nifty = self.feed.quote(["NSE:NIFTY 50"])
+                self.spot = float(nifty["NSE:NIFTY 50"]["last_price"])
+                quotes = {"NSE:NIFTY 50": nifty["NSE:NIFTY 50"]}
+                errors.append(f"batched quote failed, retried spot: {exc}")
+                logger.error(errors[-1])
+            except Exception as exc2:
+                self.last_error = f"spot/contract error: {exc2}"
+                logger.error(self.last_error)
+                return self._status(now, {}, errors=[self.last_error])
+
+        self.refresh_contracts(self.spot, force=self.atm_strike is None)
+
+        # Fetch option quotes only when the contract was not in the batch
+        # (first scan, ATM shift, expiry rollover, or a newly adopted leg).
+        missing = []
+        for opt in ("CE", "PE"):
+            contract = self._resolve_contract(opt)
+            if not contract:
+                symbol_for.pop(opt, None)
+                continue
+            sym = f"NFO:{contract['tradingsymbol']}"
+            symbol_for[opt] = (sym, contract)
+            if sym not in quotes and sym not in missing:
+                missing.append(sym)
+        if missing:
+            try:
+                quotes.update(self.feed.quote(missing))
+            except Exception as exc:
+                errors.append(f"option quote error: {exc}")
+                logger.error(errors[-1])
 
         option_status = {}
         for opt in ("CE", "PE"):
@@ -561,62 +817,27 @@ class TrailLiveScanner:
             else:
                 expiry_str = str(expiry)
 
-            try:
-                force_candles = state.needs_exit(now)
-                candles = self.feed.candles(token, force=force_candles)
-            except Exception as exc:
-                errors.append(f"{opt} candle error: {exc}")
-                logger.error(errors[-1])
-                option_status[opt] = {"error": str(exc)}
-                continue
-
-            forming_is_current = bool(candles) and candles[-1]["start"] == current_candle
-            if forming_is_current:
-                ev = evaluate_option(candles, opt, ltp)
-            else:
-                ev = Evaluation(
-                    option_type=opt, ltp=ltp,
-                    reason="waiting for current 5-minute candle")
-
             # --- trail exit check (before candle-close exit) ---
-            if state.position is not None:
+            if pos is not None:
                 stop_hit = state.update_trail(ltp)
                 if stop_hit is not None:
-                    candle = self.feed.candle_at(token, pos.entry_candle_start)
-                    ch = candle["high"] if candle else (candles[-1]["high"] if candles else None)
-                    cl = candle["low"] if candle else (candles[-1]["low"] if candles else None)
-                    # Realistic exit: use actual sampled LTP at breach (slippage),
-                    # not the idealized stop level.
+                    # Exit price is the actual sampled LTP at the breach.
                     exit_px = round(float(ltp), 2)
                     trade = state.close(pos.entry_candle_end, exit_px,
-                                        "TRAIL_STOP_EXIT",
-                                        candle_high=ch, candle_low=cl)
+                                        "TRAIL_STOP_EXIT")
                     save_trade(trade)
                     delete_open_position(opt)
                     logger.info(
                         "TRAIL EXIT %s %s strike=%s entry=%.2f exit=%.2f pnl=%.2f (stop=%.2f)",
                         opt, pos.tradingsymbol, pos.strike, pos.entry_price,
                         exit_px, trade["pnl_points"], pos.stop)
-                    option_status[opt] = {
-                        "tradingsymbol": contract["tradingsymbol"],
-                        "token": token,
-                        "strike": strike,
-                        "expiry": expiry_str,
-                        "ltp": ltp,
-                        "prev_high": ev.prev_high,
-                        "current_open": ev.current_open,
-                        "breakout": ev.breakout,
-                        "signal": ev.signal,
-                        "ready": ev.ready,
-                        "forming_is_current": forming_is_current,
-                        "reason": ev.reason + " (trail exit)",
-                        "entry_made": False,
-                        "position": None,
-                    }
-                    continue
-
-                if state.needs_exit(now):
-                    candle = self.feed.candle_at(token, pos.entry_candle_start)
+                elif state.needs_exit(now):
+                    candle = None
+                    try:
+                        candle = self.feed.candle_at(token, pos.entry_candle_start)
+                    except Exception as exc:
+                        errors.append(f"{opt} exit candle error: {exc}")
+                        logger.error(errors[-1])
                     if candle is not None:
                         close_px = candle["close"]
                         reason = "SAME_CANDLE_EXIT"
@@ -634,35 +855,34 @@ class TrailLiveScanner:
                         opt, pos.tradingsymbol, pos.strike, pos.entry_price,
                         close_px, trade["pnl_points"], reason)
 
-            # --- entry ---
-            entry_made = False
-            if allow_entries and forming_is_current and state.position is None:
-                new_pos = state.try_entry(
-                    ev, now, strike, expiry_str, token,
-                    contract["tradingsymbol"], market_close_dt(now))
-                if new_pos is not None:
-                    save_open_position(new_pos)
-                    entry_made = True
-                    logger.info(
-                        "ENTRY %s %s strike=%s ltp=%.2f prev_high=%.2f candle=%s",
-                        opt, new_pos.tradingsymbol, strike, new_pos.entry_price,
-                        new_pos.prev_high,
-                        new_pos.entry_candle_start.isoformat())
-
+            base_opt = (self.base_status or {}).get("options", {}).get(opt) or {}
+            base_pos = base_opt.get("position")
             option_status[opt] = {
                 "tradingsymbol": contract["tradingsymbol"],
                 "token": token,
                 "strike": strike,
                 "expiry": expiry_str,
                 "ltp": ltp,
-                "prev_high": ev.prev_high,
-                "current_open": ev.current_open,
-                "breakout": ev.breakout,
-                "signal": ev.signal,
-                "ready": ev.ready,
-                "forming_is_current": forming_is_current,
-                "reason": ev.reason,
-                "entry_made": entry_made,
+                "sma": (base_opt.get("sma3") or base_opt.get("sma9")
+                        or base_opt.get("sma20") or base_opt.get("sma")),
+                "prev_close": base_opt.get("prev_close"),
+                "prev_high": base_opt.get("prev_high"),
+                "current_open": base_opt.get("current_open"),
+                "condition_a": base_opt.get("condition_a"),
+                "condition_b": base_opt.get("condition_b"),
+                "condition_c": base_opt.get("condition_c"),
+                "qualified": base_opt.get("qualified"),
+                "confirmation": base_opt.get("confirmation"),
+                "breakout": base_opt.get("breakout"),
+                "signal": base_opt.get("signal"),
+                "ready": base_opt.get("ready"),
+                "forming_is_current": base_opt.get("forming_is_current"),
+                "reason": base_opt.get("reason"),
+                "base_scanner": "sma9_high",
+                "base_status_ok": self.base_ok,
+                "base_trade_id": (base_pos or {}).get("trade_id"),
+                "base_has_position": base_pos is not None,
+                "entry_made": any(a[0] == opt for a in adopted),
                 "position": state.position.as_dict() if state.position else None,
             }
 
@@ -688,6 +908,9 @@ class TrailLiveScanner:
             "expiry": self.expiry.isoformat() if hasattr(self.expiry, "isoformat") else self.expiry,
             "options": options,
             "today": today_stats(today),
+            "base_scanner": "sma9_high",
+            "base_status_ok": self.base_ok,
+            "base_status_error": self.base_feed.last_error,
             "errors": errors or [],
             "last_error": self.last_error,
         }
@@ -696,6 +919,10 @@ class TrailLiveScanner:
 def main():
     logger.info("SMA9 HIGH Trail - ATM Option Strike + Trail Exit (BUY ONLY) starting (poll=%ss, db=%s)", POLL_SECONDS, DB_PATH)
     init_db()
+    try:
+        prune_consumed_base_trades()
+    except Exception as exc:
+        logger.error("consumed-trade prune failed: %s", exc)
     try:
         feed = KiteFeed()
         feed.refresh_instruments()

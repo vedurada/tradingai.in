@@ -1,105 +1,17 @@
 # SMA9 Trail Trail Scanner
 
-## Overview
+Trailing-stop variant of the sma9 scanner. Entry signals are consumed from the base sma9 scanner's live open position (same contract, price and entry candle); this scanner only owns the exit, which is a 5-point trailing stop (activates at +5, stop = peak - 5) or the entry-candle close.
 
-SMA9 Trail Trail is a BUY-only paper trading scanner for ATM NIFTY CE/PE options
-that uses a **SMA9 qualified (prev close > SMA9 OR current open > SMA9) AND LTP > SMA9 entry rule** combined with a **5-point trailing stop exit**.
+Database: /opt/tradingai/database/sma9_trail.db
+Service: tradingai-sma9-trail-scanner
+API: /api/sma9-trail/*
+Dashboard: https://tradingai.in/live/sma9-trail/
 
-## Entry Logic
+## Rate-limit hardening
 
-
-
-## Exit Logic (Trailing Stop)
-
-- Stop is **inactive** until the option trades **+5 points** above entry
-- At activation, stop is set at **entry price** (breakeven)
-- Thereafter, stop = `high_water_mark - 5`, ratcheting up only
-- **Exit at stop only if stop is above entry price** (profitable lock)
-- Breakeven or loss stops are **ignored** — trade runs to candle close
-- Otherwise, exit at the entry 5-minute candle close
-
-## Strategy Parameters
-
-| Parameter | Value |
-|-----------|-------|
-| Trade ID Prefix | S9T- |
-| Service User | sma9trail |
-| Database | sma9_trail.db |
-| Systemd Service | tradingai-sma9-trail-scanner |
-| API Namespace | /api/sma9-trail/ |
-| Dashboard | https://tradingai.in/live/sma9-trail/ |
-| Poll Interval | 5 seconds |
-| Timeframe | 5-minute candles |
-| Lot Size | 65 |
-| Strategy ID | sma9_trail_scanner |
-| Version | 1.0.0 |
-
-## File Structure
-
-```
-sma9_trail_scanner/
-├── app/
-│   ├── __init__.py
-│   ├── live_sma9_trail_scanner_scanner.py
-│   ├── sma9_trail_scanner_engine.py
-│   └── sma9_trail_scanner_db_setup.py
-├── ops/
-│   ├── tradingai-sma9_trail_scanner-scanner.service
-│   ├── lock_code.sh
-│   ├── unlock_code.sh
-│   ├── status.sh
-│   ├── install_integrity_timer.sh
-│   ├── verify_integrity.sh
-│   ├── verify_system.py
-│   └── verify_dashboard.py
-├── tests/
-│   └── test_sma9_trail_scanner_engine.py
-├── docs/
-│   └── SECURITY_AND_OPERATIONS.md
-├── MANIFEST.sha256
-├── VERSION
-└── README.md
-```
-
-## API Endpoints
-
-All endpoints under `/api/sma9-trail/`:
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| /signals | GET | Paginated trade signals |
-| /trades | GET | Alias for signals |
-| /daily-summary | GET | Daily P&L summary |
-| /scanner-status | GET | Scanner health + live evaluation |
-| /live-status | GET | Raw scanner heartbeat (5s refresh) |
-| /recent-trades | GET | Recent trades |
-| /today | GET | Today's LIVE paper trades |
-| /legacy-audit | GET | Legacy audit stub |
-| /open-positions | GET | Open positions |
-
-## Deployment
-
-```bash
-# Install service
-sudo cp ops/tradingai-sma9_trail_scanner-scanner.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now tradingai-sma9_trail_scanner-scanner
-
-# Lock code (production)
-sudo bash ops/lock_code.sh
-
-# Verify
-python3 ops/verify_system.py
-python3 ops/verify_dashboard.py
-```
-
-## Read-Only Guarantee
-
-This scanner is **paper trading only**. No `place_order` or `order_id`
-references exist in the code. It never places real broker orders.
-
-## Exit Reasons
-
-- `SAME_CANDLE_EXIT` — Exit at entry candle close (fallback)
-- `TRAIL_STOP_EXIT` — Exit at trailing stop (profitable lock only)
-- `SAME_CANDLE_EXIT_LTP_FALLBACK` — Exit candle unavailable, used LTP
+- Staggered 5s tick (offset 1.2s) so scanners do not hit Kite together.
+- One local base-status HTTP call per tick; no Kite quota is used.
+- One batched quote call per tick (NIFTY spot + CE + PE legs).
+- Trail-stop exit uses the live LTP only; no historical call.
+- Historical candles are fetched only for the entry-candle close exit.
+- Historical lookback is 1 day, widened to 3 days only when too few candles are returned (weekends/holidays).
