@@ -1,0 +1,9 @@
+# TradingAI paper scanners — runtime requirements
+#
+# All 14 scanners import kiteconnect lazily inside the broker connection.
+# Strategy logic uses the Python standard library only.
+#
+# Transitive dependencies (requests, six, pyOpenSSL, python-dateutil,
+# twisted, service_identity, autobahn) are provided by the system Python 3.10
+# dist-packages on the VM. Pinning kiteconnect is sufficient for a fresh host.
+kiteconnect==5.2.2
