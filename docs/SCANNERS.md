@@ -497,10 +497,12 @@ edit and restart normally.
 
 ### 8.6 Rate-limit hygiene
 
-- Base plain scanners: 2 quote calls per tick (spot + both legs batched), no
-  offset.
-- Base HIGH scanners: offset 1.2 / 2.4 / 3.6 s.
-- Trail scanners: one batched quote call, offsets 0.6–4.2 s.
+- Base plain scanners (`sma3`, `sma9`, `sma20`, `no_sma`): **2 quote calls per
+  tick** — one spot-only refresh for ATM selection, plus one batched
+  spot+CE+PE quote. Offset 0.
+- Base HIGH scanners: same **2-call** pattern, offsets 1.2 / 2.4 / 3.6 s.
+- Trail scanners: **1 batched spot+CE+PE quote per tick** (extra calls only on
+  a failed batch or a newly missing contract), offsets 0.6–4.2 s.
 - Historical candles are fetched only when a new 5-minute candle appears (or
   at exit), never on every poll.
 - Kite limits: quotes ≈1 req/s, historical ≈3 req/s per API key.
