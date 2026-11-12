@@ -136,7 +136,7 @@ function renderOptionCard(opt, data) {
         card.innerHTML = "<div class=\"empty\">" + (data && data.error ? data.error : "No data") + "</div>";
         return;
     }
-    const html = `
+    let html = `
         <div class="kv">
             <div class="k">LTP</div><div class="v">${n(data.ltp || 0)}</div>
             <div class="k">Signal</div><div class="v ${cls(data.signal ? 1 : 0)}">${data.signal ? "YES" : "no"}</div>
