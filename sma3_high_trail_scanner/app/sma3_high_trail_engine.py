@@ -2,7 +2,8 @@
 """Pure SMA3 HIGH Trail strategy engine for ATM NIFTY CE and PE options.
 
 BUY-ONLY rules (identical for CE and PE):
-  Entry: inherited from base sma3_high scanner
+  Entry: previous completed 5-min candle CLOSE > SMA3 HIGH
+         AND live option LTP > previous completed candle HIGH
   Exit: TRAILING STOP -- stop = peak - 5.0 pts, activates at +5.0 pts
         (breakeven at activation), ratchets up only.
         Exit at the stop ONLY if the stop is above entry price (profitable lock).
