@@ -97,6 +97,24 @@
     </table>
 </section>
 
+<section class="section">
+    <h2>Trail Signals &mdash; All Consumed Base Trades</h2>
+    <div class="stats-grid">
+        <div class="stat-card"><div class="label">Total Signals</div><div class="value mono" id="signal-count">0</div></div>
+        <div class="stat-card"><div class="label">Wins</div><div class="value mono pos" id="signal-wins">0</div></div>
+        <div class="stat-card"><div class="label">Losses</div><div class="value mono neg" id="signal-losses">0</div></div>
+        <div class="stat-card"><div class="label">P&L (pts)</div><div class="value mono" id="signal-pnl">0.00</div></div>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>Signal Time</th><th>Type</th><th>Strike</th><th>Entry</th><th>Exit</th><th>P&L</th><th>Reason</th><th>Entry Candle</th><th>Trade ID</th>
+            </tr>
+        </thead>
+        <tbody id="signal-tbody"></tbody>
+    </table>
+</section>
+
 <script>
 const API_BASE = "/api/sma9-trail";
 const REFRESH_MS = 5000;
@@ -159,14 +177,43 @@ function renderTrades(tbodyId, trades, scope) {
         tbody.insertAdjacentHTML("beforeend", tr);
     }
 }
+function renderSignals(signals) {
+    const tbody = document.getElementById("signal-tbody");
+    tbody.innerHTML = "";
+    let wins = 0, losses = 0, pnl = 0;
+    for (const t of signals) {
+        const p = t.pnl_points || 0;
+        pnl += p;
+        if (p > 0) wins++; else if (p < 0) losses++;
+        const tr = `<tr>
+            <td class="mono">${t.signal_timestamp ? t.signal_timestamp.slice(11,19) : "--"}</td>
+            <td>${t.option_type}</td>
+            <td>${t.strike}</td>
+            <td>${n(t.entry_price || 0)}</td>
+            <td>${n(t.exit_price || 0)}</td>
+            <td class="mono ${cls(p)}">${n(p)}</td>
+            <td>${t.exit_reason || "--"}</td>
+            <td class="mono">${t.entry_candle_start ? t.entry_candle_start.slice(11,19) : "--"}</td>
+            <td class="mono">${t.trade_id || "--"}</td>
+        </tr>`;
+        tbody.insertAdjacentHTML("beforeend", tr);
+    }
+    document.getElementById("signal-count").textContent = signals.length;
+    document.getElementById("signal-wins").textContent = wins;
+    document.getElementById("signal-losses").textContent = losses;
+    document.getElementById("signal-pnl").textContent = n(pnl);
+    document.getElementById("signal-pnl").className = "value mono " + cls(pnl);
+}
 async function refresh() {
     try {
-        const [statusResp, todayResp] = await Promise.all([
+        const [statusResp, todayResp, signalsResp] = await Promise.all([
             fetch(API_BASE + "/scanner-status"),
             fetch(API_BASE + "/today"),
+            fetch(API_BASE + "/signals?limit=200"),
         ]);
         const status = await statusResp.json();
         const today = await todayResp.json();
+        const signals = await signalsResp.json();
 
         if (status.success) {
             const s = status;
@@ -194,6 +241,9 @@ async function refresh() {
             document.getElementById("today-pnl").textContent = n(pnl);
             document.getElementById("today-pnl").className = "value mono " + cls(pnl);
             renderTrades("today-tbody", today.trades || [], "today");
+        }
+        if (signals.success) {
+            renderSignals(signals.signals || signals.trades || []);
         }
     } catch (e) {
         console.error("Refresh failed:", e);
