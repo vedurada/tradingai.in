@@ -330,7 +330,7 @@ Family-specific columns:
 
 | Family | Extra columns |
 |---|---|
-| Base SMA | `sma3_value` (or `sma_value`), `prev_close`, `condition_a`, `condition_b` |
+| Base SMA | `sma{n}_value` (`sma3_value` / `sma9_value` / `sma20_value`), `prev_close`, `condition_a`, `condition_b` |
 | HIGH | `sma_value`, `prev_high`, `condition_a`, `condition_b` |
 | NO-SMA | `prev_high`, `breakout` |
 | Trail | `prev_high`, `breakout`, and `hwm`, `stop` in `open_positions` |
